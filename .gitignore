@@ -1,0 +1,23 @@
+# Rust
+backend/target/
+backend/.env
+
+# Godot
+frontend/.godot/
+frontend/bin/
+frontend/.mono/
+frontend/**/*.uid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# ローカル開発専用
+CLAUDE.local.md
+scripts_local/

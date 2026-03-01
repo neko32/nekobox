@@ -1,0 +1,50 @@
+# nekobox バックエンド Docker Compose 設定
+#
+# 使い方:
+#   1. backend/.env を作成して NEKOBOX_LMSTUDIO_HOST/PORT を設定
+#   2. deploy/ ディレクトリで実行:
+#        docker compose up --build
+#
+# ホスト側の LM Studio へは host.docker.internal でアクセスする (Docker Desktop for Windows/Mac)
+# Linux ホストの場合は extra_hosts の設定が必要 (コメントを参照)
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: nekobox-backend:latest
+    container_name: nekobox-backend
+    ports:
+      - "8080:8080"
+    environment:
+      NEKOBOX_CFG_PATH: /nekobox/config
+      NEKOBOX_DB_PATH:  /nekobox/data
+      NEKOBOX_BIND_HOST: "0.0.0.0"
+      # LM Studio はホストマシン上で動作するため host.docker.internal を使用
+      # Linux ホストの場合は extra_hosts セクションのコメントを外すこと
+      NEKOBOX_LMSTUDIO_HOST: host.docker.internal
+      NEKOBOX_LMSTUDIO_PORT: "1234"
+      RUST_LOG: info
+    volumes:
+      # app.config・キャラクター設定・背景画像 (読み取り専用)
+      - ../config:/nekobox/config:ro
+      # SQLite DB 永続化 (名前付きボリューム)
+      - nekobox_data:/nekobox/data
+    restart: unless-stopped
+    healthcheck:
+      # /v1/msg は POST のみなので 405 が返れば起動済みと判断
+      test: ["CMD", "sh", "-c",
+             "echo '' | nc -w1 localhost 8080 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Linux ホストで LM Studio にアクセスする場合はコメントを外す
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+volumes:
+  nekobox_data:
+    name: nekobox_data

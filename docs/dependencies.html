@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nekobox 依存ライブラリ一覧</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #f8f9fa;
+      color: #333;
+    }
+    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 0.5rem; }
+    h2 { color: #34495e; margin-top: 2.5rem; border-left: 4px solid #3498db; padding-left: 0.75rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+    th {
+      background: #2c3e50;
+      color: #fff;
+      text-align: left;
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+    }
+    td { padding: 0.65rem 1rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f0f7ff; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-prod  { background: #d5f5e3; color: #1e8449; }
+    .badge-dev   { background: #d6eaf8; color: #1a5276; }
+    .badge-safe  { background: #eafaf1; color: #196f3d; }
+    .badge-watch { background: #fef9e7; color: #7d6608; }
+    .meta { color: #888; font-size: 0.82rem; margin-top: 0.25rem; }
+    footer { margin-top: 3rem; color: #999; font-size: 0.82rem; text-align: center; }
+    a { color: #3498db; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<h1>📦 nekobox 依存ライブラリ一覧</h1>
+<p class="meta">生成日: 2026-03-01 &nbsp;|&nbsp; 担当: とちまる (セキュリティエンジニア)</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>🦀 Backend (Rust) — 本番依存</h2>
+<table>
+  <thead>
+    <tr>
+      <th>クレート名</th>
+      <th>バージョン</th>
+      <th>ライセンス</th>
+      <th>説明</th>
+      <th>セキュリティ</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://crates.io/crates/axum">axum</a></td>
+      <td>0.8.8</td>
+      <td>MIT</td>
+      <td>Tower ベースの非同期 Web フレームワーク。ルーティング・ミドルウェア・ハンドラを提供。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/tokio">tokio</a></td>
+      <td>1.49.0</td>
+      <td>MIT</td>
+      <td>Rust の非同期処理ランタイム。I/O・タイマー・タスクスケジューリングを担う。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/sqlx">sqlx</a></td>
+      <td>0.8.6</td>
+      <td>MIT / Apache-2.0</td>
+      <td>非同期 SQL クライアント。SQLite ドライバを使用。パラメータ化クエリによる SQLi 対策済み。</td>
+      <td><span class="badge badge-watch">🟡 RUSTSEC-2023-0071 (除外済み)</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/reqwest">reqwest</a></td>
+      <td>0.12.28</td>
+      <td>MIT / Apache-2.0</td>
+      <td>HTTP クライアントライブラリ。LM Studio への API リクエストに使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/serde">serde</a></td>
+      <td>1.0.228</td>
+      <td>MIT / Apache-2.0</td>
+      <td>Rust の汎用シリアライズ・デシリアライズフレームワーク。JSON 変換の基盤。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/serde_json">serde_json</a></td>
+      <td>1.0.149</td>
+      <td>MIT / Apache-2.0</td>
+      <td>serde の JSON シリアライザ実装。API リクエスト・レスポンスと設定ファイルの解析に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/uuid">uuid</a></td>
+      <td>1.21.0</td>
+      <td>Apache-2.0 / MIT</td>
+      <td>UUID 生成ライブラリ。セッション ID に v4 (CSPRNG) を使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/chrono">chrono</a></td>
+      <td>0.4.44</td>
+      <td>MIT / Apache-2.0</td>
+      <td>日時処理ライブラリ。会話ログのタイムスタンプ記録に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/async-trait">async-trait</a></td>
+      <td>0.1.89</td>
+      <td>MIT / Apache-2.0</td>
+      <td>trait の async fn を安定化する proc-macro。トレイト抽象化に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/thiserror">thiserror</a></td>
+      <td>2.0.18</td>
+      <td>MIT / Apache-2.0</td>
+      <td>エラー型の derive マクロ。<code>AppError</code> の実装に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/anyhow">anyhow</a></td>
+      <td>1.0.102</td>
+      <td>MIT / Apache-2.0</td>
+      <td>型消去エラーハンドリングライブラリ。<code>main()</code> のエラー伝播に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/dotenvy">dotenvy</a></td>
+      <td>0.15.7</td>
+      <td>MIT</td>
+      <td><code>.env</code> ファイルから環境変数を読み込む。開発環境のみで使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/tracing">tracing</a></td>
+      <td>0.1.44</td>
+      <td>MIT</td>
+      <td>構造化ログ・トレーシングフレームワーク。アプリケーションログの記録に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/tracing-subscriber">tracing-subscriber</a></td>
+      <td>0.3.22</td>
+      <td>MIT</td>
+      <td>tracing のサブスクライバ実装。環境変数ベースのログフィルタリングを担う。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>🧪 Backend (Rust) — 開発・テスト依存</h2>
+<table>
+  <thead>
+    <tr>
+      <th>クレート名</th>
+      <th>バージョン</th>
+      <th>ライセンス</th>
+      <th>説明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://crates.io/crates/mockall">mockall</a></td>
+      <td>0.13.1</td>
+      <td>MIT / Apache-2.0</td>
+      <td>トレイト実装の自動モック生成。ユニットテストで外部依存を差し替えるために使用。</td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/axum-test">axum-test</a></td>
+      <td>19.0.0</td>
+      <td>MIT</td>
+      <td>axum ハンドラのテスト用 HTTP クライアント。<code>TestServer</code> を提供。</td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/tempfile">tempfile</a></td>
+      <td>3.26.0</td>
+      <td>MIT / Apache-2.0</td>
+      <td>テスト用の一時ファイル・ディレクトリを作成するユーティリティ。</td>
+    </tr>
+    <tr>
+      <td><a href="https://crates.io/crates/tokio-test">tokio-test</a></td>
+      <td>0.4.5</td>
+      <td>MIT</td>
+      <td>Tokio の非同期コードテスト支援ユーティリティ。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>🎮 Frontend (Godot 4 / C#)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>パッケージ名</th>
+      <th>バージョン</th>
+      <th>ライセンス</th>
+      <th>説明</th>
+      <th>セキュリティ</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://godotengine.org/">Godot Engine</a></td>
+      <td>4.6.1-stable (Mono)</td>
+      <td>MIT</td>
+      <td>2D/3D ゲームエンジン。デスクトップコンパニオンの UI・演出・イベント処理に使用。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td><a href="https://www.nuget.org/packages/Godot.NET.Sdk">Godot.NET.Sdk</a></td>
+      <td>4.6.1</td>
+      <td>MIT</td>
+      <td>Godot 向け .NET SDK。C# スクリプトのビルドと Godot エンジンとの統合を担う。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+    <tr>
+      <td>.NET Runtime</td>
+      <td>8.0 (LTS)</td>
+      <td>MIT</td>
+      <td>C# の実行環境。Godot Mono ビルドに組み込まれ、スクリプトの実行基盤となる。</td>
+      <td><span class="badge badge-safe">✅ Safe</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>📝 既知のアドバイザリ</h2>
+<table>
+  <thead>
+    <tr>
+      <th>アドバイザリ ID</th>
+      <th>対象クレート</th>
+      <th>重大度</th>
+      <th>影響</th>
+      <th>対応</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://rustsec.org/advisories/RUSTSEC-2023-0071.html">RUSTSEC-2023-0071</a></td>
+      <td>rsa (via sqlx-mysql)</td>
+      <td>Medium</td>
+      <td>nekobox は SQLite のみ使用。<code>sqlx-mysql</code> は有効化されておらず、<code>rsa</code> クレートは実行時にリンクされない。実質的なリスクなし。</td>
+      <td><code>.cargo/audit.toml</code> にて除外・文書化済み</td>
+    </tr>
+  </tbody>
+</table>
+
+<footer>
+  nekobox dependencies.html &mdash; 自動生成: とちまる (セキュリティエンジニア) &mdash; 2026-03-01
+</footer>
+
+</body>
+</html>

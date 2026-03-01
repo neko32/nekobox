@@ -1,0 +1,28 @@
+[Unit]
+Description=nekobox backend service
+After=network.target
+
+[Service]
+Type=simple
+User=nekobox
+WorkingDirectory=/opt/nekobox
+ExecStart=/opt/nekobox/nekobox-backend
+Restart=on-failure
+RestartSec=5s
+
+Environment=NEKOBOX_CFG_PATH=/etc/nekobox
+Environment=NEKOBOX_DB_PATH=/var/lib/nekobox
+Environment=NEKOBOX_LMSTUDIO_HOST=127.0.0.1
+Environment=NEKOBOX_LMSTUDIO_PORT=1234
+# ローカルコンパニオンアプリ: ループバックのみにバインド
+Environment=NEKOBOX_BIND_HOST=127.0.0.1
+Environment=RUST_LOG=info
+
+# セキュリティ強化
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nekobox
+
+[Install]
+WantedBy=multi-user.target

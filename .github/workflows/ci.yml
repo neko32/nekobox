@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Rustfmt check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (pedantic)
+        run: cargo clippy --all-targets --all-features -- -W clippy::pedantic -D clippy::correctness -D clippy::suspicious
+
+      - name: cargo audit (セキュリティ脆弱性チェック)
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit
+
+      - name: Test with coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Check coverage threshold (90%)
+        run: cargo llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/lcov.info
+
+      - name: Generate HTML coverage report
+        run: cargo llvm-cov --all-features --workspace --html --output-dir ../docs/coverage
+
+      - name: Upload HTML coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: docs/coverage/
