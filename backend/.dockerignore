@@ -1,0 +1,15 @@
+# ビルドキャッシュ・成果物（巨大なので除外）
+target/
+
+# ローカル開発用設定（コンテナに含めない）
+.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# テスト成果物
+tests/
+lcov.info

@@ -1,0 +1,119 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/Scripts/Main.cs" id="1"]
+[ext_resource type="Script" path="res://src/Scripts/ChatWindow.cs" id="2"]
+[ext_resource type="Script" path="res://src/Scripts/InputPopup.cs" id="3"]
+[ext_resource type="Shader" path="res://src/Resources/BlurShader.gdshader" id="4"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
+shader = ExtResource("4")
+shader_parameter/blur_amount = 3.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_chat"]
+bg_color = Color(0.169, 0.169, 0.169, 0.65)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.447, 0.592, 0.773, 1.0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+
+[node name="Main" type="Node"]
+script = ExtResource("1")
+
+; ── 背景レイヤー ──────────────────────────────────────────────
+[node name="BackgroundLayer" type="CanvasLayer" parent="."]
+layer = 0
+
+[node name="BackgroundRect" type="TextureRect" parent="BackgroundLayer"]
+material = SubResource("ShaderMaterial_bg")
+offset_right = 1200.0
+offset_bottom = 800.0
+stretch_mode = 0
+
+; ── キャラクターレイヤー ─────────────────────────────────────
+[node name="CharacterLayer" type="CanvasLayer" parent="."]
+layer = 1
+
+[node name="CharacterContainer" type="Node2D" parent="CharacterLayer"]
+position = Vector2(600, 350)
+
+; ── UI レイヤー ──────────────────────────────────────────────
+[node name="UILayer" type="CanvasLayer" parent="."]
+layer = 2
+
+[node name="MainControl" type="Control" parent="UILayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+; セッションラベル（左上）
+[node name="SessionLabel" type="Label" parent="UILayer/MainControl"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 12.0
+theme_override_colors/font_color = Color(1, 1, 1, 0.9)
+theme_override_font_sizes/font_size = 20
+text = "Session: ---"
+
+; 時刻・日付ラベル（セッションラベルの下）
+[node name="ClockLabel" type="Label" parent="UILayer/MainControl"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 40.0
+theme_override_colors/font_color = Color(1, 1, 1, 0.85)
+theme_override_font_sizes/font_size = 16
+text = ""
+
+; チャットウィンドウ（画面下30%、半透明）
+[node name="ChatWindow" type="PanelContainer" parent="UILayer/MainControl"]
+layout_mode = 1
+anchor_top = 0.70
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_chat")
+script = ExtResource("2")
+
+[node name="ScrollContainer" type="ScrollContainer" parent="UILayer/MainControl/ChatWindow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="MessagesList" type="VBoxContainer" parent="UILayer/MainControl/ChatWindow/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+; ユーザー入力ポップアップ（モードレスウィンドウ）
+[node name="InputPopup" type="Window" parent="UILayer"]
+title = "メッセージを入力"
+initial_position = 0
+size = Vector2i(520, 130)
+always_on_top = true
+script = ExtResource("3")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UILayer/InputPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+theme_override_constants/separation = 6
+
+[node name="InputText" type="TextEdit" parent="UILayer/InputPopup/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+placeholder_text = "メッセージを入力... (Enter: 送信 / Shift+Enter: 改行)"
+wrap_mode = 1
+
+[node name="SendButton" type="Button" parent="UILayer/InputPopup/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+text = "送信"
