@@ -1,6 +1,7 @@
 # Rust
 backend/target/
 backend/.env
+backend/*.sqlite3
 
 # Godot
 frontend/.godot/
@@ -20,4 +21,3 @@ Thumbs.db
 
 # ローカル開発専用
 CLAUDE.local.md
-scripts_local/

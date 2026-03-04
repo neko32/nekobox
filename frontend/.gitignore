@@ -1,4 +1,4 @@
 .godot/
-bin/
+/bin/
 .mono/
 *.uid
