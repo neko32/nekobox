@@ -242,6 +242,60 @@ mod tests {
     fn emotion_default_is_neutral() {
         assert_eq!(Emotion::default().as_str(), "普通");
     }
+
+    // ── Role ──────────────────────────────────────────────────
+
+    #[test]
+    fn role_user_as_str() {
+        assert_eq!(Role::User.as_str(), "user");
+    }
+
+    #[test]
+    fn role_assistant_as_str() {
+        assert_eq!(Role::Assistant.as_str(), "assistant");
+    }
+
+    #[test]
+    fn role_from_str_user() {
+        assert_eq!(Role::from_str("user"), Some(Role::User));
+    }
+
+    #[test]
+    fn role_from_str_assistant() {
+        assert_eq!(Role::from_str("assistant"), Some(Role::Assistant));
+    }
+
+    #[test]
+    fn role_from_str_unknown_returns_none() {
+        assert!(Role::from_str("unknown").is_none());
+    }
+}
+
+/// メッセージ送信者の役割
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Role {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "assistant")]
+    Assistant,
+}
+
+impl Role {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::User => "user",
+            Self::Assistant => "assistant",
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "user" => Some(Self::User),
+            "assistant" => Some(Self::Assistant),
+            _ => None,
+        }
+    }
 }
 
 /// 会話ログ（sessionテーブル用）
@@ -260,4 +314,6 @@ pub struct SessionLog {
     pub input_tokens: Option<i64>,
     pub total_output_tokens: Option<i64>,
     pub timestamp: DateTime<Utc>,
+    pub role: Role,
+    pub emotion: Option<String>,
 }
