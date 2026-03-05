@@ -7,7 +7,7 @@ use crate::{
     api::lm_studio::{ChatMessage, ChatRequest},
     core::{
         error::AppError,
-        models::{Emotion, SessionLog},
+        models::{Emotion, Role, SessionLog},
     },
     AppState,
 };
@@ -125,6 +125,8 @@ pub async fn msg_handler(
             input_tokens: None,
             total_output_tokens: None,
             timestamp: Utc::now(),
+            role: Role::User,
+            emotion: None,
         })
         .await?;
 
@@ -145,6 +147,8 @@ pub async fn msg_handler(
             input_tokens,
             total_output_tokens: output_tokens,
             timestamp: Utc::now(),
+            role: Role::Assistant,
+            emotion: Some(emotion.as_str().to_string()),
         })
         .await?;
 
