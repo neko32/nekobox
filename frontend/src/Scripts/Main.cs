@@ -107,11 +107,11 @@ public partial class Main : Node
             return false;
         }
 
-        // キャラクター設定ファイルの存在確認
-        var settingsFile = _config.GetCharacterSettingsFile();
+        // キャラクタープロンプトファイルの存在確認
+        var settingsFile = _config.GetCharacterPromptFile();
         if (!System.IO.File.Exists(settingsFile))
         {
-            OS.Alert($"キャラクター設定ファイルが見つかりません:\n{settingsFile}", "nekobox 起動エラー");
+            OS.Alert($"キャラクタープロンプトファイルが見つかりません:\n{settingsFile}", "nekobox 起動エラー");
             GetTree().Quit(1);
             return false;
         }

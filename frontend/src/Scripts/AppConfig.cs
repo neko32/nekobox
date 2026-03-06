@@ -41,10 +41,6 @@ public sealed class AppConfig
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsFirstSession => CurrentSession == "na";
 
-    /// <summary>キャラクター設定ファイルのフルパスを返す</summary>
-    public string GetCharacterSettingsFile() =>
-        Path.Combine(Character.SettingsPath, $"{Character.Name}_{Character.Version}.json");
-
     /// <summary>キャラクタープロンプトファイルのフルパスを返す (.md)</summary>
     public string GetCharacterPromptFile() =>
         Path.Combine(Character.SettingsPath, $"{Character.Name}_{Character.Version}.md");
