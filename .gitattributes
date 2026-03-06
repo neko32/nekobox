@@ -1,0 +1,11 @@
+# デフォルト: テキストファイルは自動判定
+* text=auto
+
+# マイグレーションSQLはLF固定 (Linux/Docker環境で実行されるため)
+backend/migrations/*.sql text eol=lf
+
+# シェルスクリプトはLF固定
+*.sh text eol=lf
+
+# PowerShellスクリプトはCRLF固定 (Windows用)
+*.ps1 text eol=crlf
