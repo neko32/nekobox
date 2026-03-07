@@ -35,13 +35,16 @@ pub async fn sessions_handler(
         .into_iter()
         .map(|log| SessionLogEntryDto {
             msg_sender_name: log.msg_sender_name,
-            user_name:       log.user_name,
-            msg:             log.msg,
-            timestamp:       log.timestamp.to_rfc3339(),
+            user_name: log.user_name,
+            msg: log.msg,
+            timestamp: log.timestamp.to_rfc3339(),
         })
         .collect();
 
-    Ok(Json(SessionHistoryResponse { session_id, entries }))
+    Ok(Json(SessionHistoryResponse {
+        session_id,
+        entries,
+    }))
 }
 
 #[cfg(test)]
@@ -91,18 +94,19 @@ mod tests {
 
     fn sample_log(session_id: &str, sender: &str, user: &str, msg: &str) -> SessionLog {
         SessionLog {
-            session_id:          session_id.to_string(),
-            background_image:    "/bg.png".to_string(),
-            msg_sender_name:     sender.to_string(),
-            user_name:           user.to_string(),
-            settings_name:       "takochan_1.0.0".to_string(),
-            msg:                 msg.to_string(),
-            image_url:           None,
-            response_id:         None,
-            model_instance_id:   None,
-            input_tokens:        None,
+            session_id: session_id.to_string(),
+            session_alias: Some("test-alias".to_string()),
+            background_image: "/bg.png".to_string(),
+            msg_sender_name: sender.to_string(),
+            user_name: user.to_string(),
+            settings_name: "takochan_1.0.0".to_string(),
+            msg: msg.to_string(),
+            image_url: None,
+            response_id: None,
+            model_instance_id: None,
+            input_tokens: None,
             total_output_tokens: None,
-            timestamp:           chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         }
     }
 

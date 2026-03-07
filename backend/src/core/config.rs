@@ -68,11 +68,13 @@ impl AppConfig {
     }
 
     /// 初回セッション（`current_session == "na"`）か
+    #[must_use] 
     pub fn is_first_session(&self) -> bool {
         self.current_session == "na"
     }
 
     /// キャラクター設定ファイルのパスを返す: `{settings_path}/{name}_{version}.json`
+    #[must_use] 
     pub fn character_settings_file(&self) -> String {
         Path::new(&self.character.settings_path)
             .join(format!(
@@ -84,6 +86,7 @@ impl AppConfig {
     }
 
     /// キャラクタープロンプトファイルのパスを返す: `{settings_path}/{name}_{version}.md`
+    #[must_use] 
     pub fn character_prompt_file(&self) -> String {
         Path::new(&self.character.settings_path)
             .join(format!(
@@ -94,7 +97,7 @@ impl AppConfig {
             .into_owned()
     }
 
-    /// `{name}_{version}.md` を直接読み込んで system_prompt として返す。
+    /// `{name}_{version}.md` を直接読み込んで `system_prompt` として返す。
     /// ファイル内の `{{name}}` はユーザー名に置換される。
     pub fn load_system_prompt(&self) -> Result<String, AppError> {
         let path = self.character_prompt_file();

@@ -17,6 +17,7 @@ pub struct SqliteConversationRepository {
 }
 
 impl SqliteConversationRepository {
+    #[must_use] 
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
@@ -75,17 +76,17 @@ impl ConversationRepository for SqliteConversationRepository {
                     .map_err(|_| AppError::Config("Invalid timestamp format".into()))?
                     .with_timezone(&Utc);
                 Ok(SessionLog {
-                    session_id:          r.get("session_id"),
-                    session_alias:       r.get("session_alias"),
-                    background_image:    r.get("background_image"),
-                    msg_sender_name:     r.get("msg_sender_name"),
-                    user_name:           r.get("user_name"),
-                    settings_name:       r.get("settings_name"),
-                    msg:                 r.get("msg"),
-                    image_url:           r.get("image_url"),
-                    response_id:         r.get("response_id"),
-                    model_instance_id:   r.get("model_instance_id"),
-                    input_tokens:        r.get("input_tokens"),
+                    session_id: r.get("session_id"),
+                    session_alias: r.get("session_alias"),
+                    background_image: r.get("background_image"),
+                    msg_sender_name: r.get("msg_sender_name"),
+                    user_name: r.get("user_name"),
+                    settings_name: r.get("settings_name"),
+                    msg: r.get("msg"),
+                    image_url: r.get("image_url"),
+                    response_id: r.get("response_id"),
+                    model_instance_id: r.get("model_instance_id"),
+                    input_tokens: r.get("input_tokens"),
                     total_output_tokens: r.get("total_output_tokens"),
                     timestamp,
                 })
@@ -188,6 +189,7 @@ mod tests {
 
         let log = SessionLog {
             session_id: "ses-003".to_string(),
+            session_alias: None,
             background_image: "/bg.png".to_string(),
             msg_sender_name: "takochan".to_string(),
             user_name: "さのまる".to_string(),
