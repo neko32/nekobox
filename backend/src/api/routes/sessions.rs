@@ -15,6 +15,8 @@ pub struct SessionLogEntryDto {
     pub user_name: String,
     pub msg: String,
     pub timestamp: String,
+    pub role: String,
+    pub emotion: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -38,6 +40,8 @@ pub async fn sessions_handler(
             user_name: log.user_name,
             msg: log.msg,
             timestamp: log.timestamp.to_rfc3339(),
+            role: log.role.as_str().to_string(),
+            emotion: log.emotion,
         })
         .collect();
 
@@ -60,7 +64,7 @@ mod tests {
         core::{
             config::{AppConfig, CharacterConfig, ModelConfig},
             db::MockConversationRepository,
-            models::SessionLog,
+            models::{Role, SessionLog},
         },
         AppState,
     };
@@ -92,7 +96,14 @@ mod tests {
         TestServer::new(app)
     }
 
-    fn sample_log(session_id: &str, sender: &str, user: &str, msg: &str) -> SessionLog {
+    fn sample_log(
+        session_id: &str,
+        sender: &str,
+        user: &str,
+        msg: &str,
+        role: Role,
+        emotion: Option<&str>,
+    ) -> SessionLog {
         SessionLog {
             session_id: session_id.to_string(),
             session_alias: Some("test-alias".to_string()),
@@ -107,6 +118,8 @@ mod tests {
             input_tokens: None,
             total_output_tokens: None,
             timestamp: chrono::Utc::now(),
+            role,
+            emotion: emotion.map(str::to_string),
         }
     }
 
@@ -118,8 +131,15 @@ mod tests {
             .once()
             .returning(|_| {
                 Ok(vec![
-                    sample_log("ses-001", "さのまる", "さのまる", "こんにちは"),
-                    sample_log("ses-001", "takochan", "さのまる", "やあ！"),
+                    sample_log("ses-001", "さのまる", "さのまる", "こんにちは", Role::User, None),
+                    sample_log(
+                        "ses-001",
+                        "takochan",
+                        "さのまる",
+                        "やあ！",
+                        Role::Assistant,
+                        Some("嬉しい"),
+                    ),
                 ])
             });
 
@@ -131,7 +151,11 @@ mod tests {
         assert_eq!(json["session_id"], "ses-001");
         assert_eq!(json["entries"].as_array().unwrap().len(), 2);
         assert_eq!(json["entries"][0]["msg"], "こんにちは");
+        assert_eq!(json["entries"][0]["role"], "user");
+        assert!(json["entries"][0]["emotion"].is_null());
         assert_eq!(json["entries"][1]["msg"], "やあ！");
+        assert_eq!(json["entries"][1]["role"], "assistant");
+        assert_eq!(json["entries"][1]["emotion"], "嬉しい");
     }
 
     #[tokio::test]

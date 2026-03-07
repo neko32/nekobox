@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
 
-use crate::core::{error::AppError, models::SessionLog};
+use crate::core::{error::AppError, models::{Role, SessionLog}};
 
 /// 会話ログ永続化のトレイト（モック・スタブ差し替え可能）
 #[cfg_attr(test, mockall::automock)]
@@ -32,8 +32,9 @@ impl ConversationRepository for SqliteConversationRepository {
             INSERT INTO session (
                 session_id, session_alias, background_image, msg_sender_name, user_name,
                 settings_name, msg, image_url, response_id,
-                model_instance_id, input_tokens, total_output_tokens, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                model_instance_id, input_tokens, total_output_tokens, timestamp,
+                role, emotion
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
         )
         .bind(&log.session_id)
@@ -49,6 +50,8 @@ impl ConversationRepository for SqliteConversationRepository {
         .bind(log.input_tokens)
         .bind(log.total_output_tokens)
         .bind(&timestamp)
+        .bind(log.role.as_str())
+        .bind(&log.emotion)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -59,7 +62,8 @@ impl ConversationRepository for SqliteConversationRepository {
             r"
             SELECT session_id, session_alias, background_image, msg_sender_name, user_name,
                    settings_name, msg, image_url, response_id,
-                   model_instance_id, input_tokens, total_output_tokens, timestamp
+                   model_instance_id, input_tokens, total_output_tokens, timestamp,
+                   role, emotion
             FROM session
             WHERE session_id = ?
             ORDER BY timestamp ASC
@@ -75,6 +79,9 @@ impl ConversationRepository for SqliteConversationRepository {
                 let timestamp = chrono::DateTime::parse_from_rfc3339(&ts_str)
                     .map_err(|_| AppError::Config("Invalid timestamp format".into()))?
                     .with_timezone(&Utc);
+                let role_str: String = r.get("role");
+                let role = Role::from_str(&role_str)
+                    .ok_or_else(|| AppError::Config(format!("Invalid role value: {role_str}")))?;
                 Ok(SessionLog {
                     session_id: r.get("session_id"),
                     session_alias: r.get("session_alias"),
@@ -89,6 +96,8 @@ impl ConversationRepository for SqliteConversationRepository {
                     input_tokens: r.get("input_tokens"),
                     total_output_tokens: r.get("total_output_tokens"),
                     timestamp,
+                    role,
+                    emotion:             r.get("emotion"),
                 })
             })
             .collect()
@@ -117,7 +126,9 @@ mod tests {
                 model_instance_id   VARCHAR,
                 input_tokens        INTEGER,
                 total_output_tokens INTEGER,
-                timestamp           DATETIME NOT NULL
+                timestamp           DATETIME NOT NULL,
+                role                VARCHAR NOT NULL DEFAULT 'user',
+                emotion             VARCHAR
             )",
         )
         .execute(&pool)
@@ -131,8 +142,8 @@ mod tests {
             session_id: session_id.to_string(),
             session_alias: None,
             background_image: "/bg.png".to_string(),
-            msg_sender_name: "user".to_string(),
-            user_name: "さのまる".to_string(),
+            msg_sender_name: "たぬ".to_string(),
+            user_name: "たぬ".to_string(),
             settings_name: "takochan_1.0.0".to_string(),
             msg: msg.to_string(),
             image_url: None,
@@ -141,6 +152,8 @@ mod tests {
             input_tokens: None,
             total_output_tokens: None,
             timestamp: Utc::now(),
+            role: Role::User,
+            emotion: None,
         }
     }
 
@@ -183,6 +196,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn save_and_get_role_and_emotion() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool.clone());
+
+        let user_log = sample_log("ses-010", "こんにちは");
+        repo.save_log(&user_log).await.unwrap();
+
+        let assistant_log = SessionLog {
+            session_id: "ses-010".to_string(),
+            session_alias: None,
+            background_image: "/bg.png".to_string(),
+            msg_sender_name: "takochan".to_string(),
+            user_name: "たぬ".to_string(),
+            settings_name: "takochan_1.0.0".to_string(),
+            msg: "やあ！".to_string(),
+            image_url: None,
+            response_id: None,
+            model_instance_id: None,
+            input_tokens: None,
+            total_output_tokens: None,
+            timestamp: Utc::now(),
+            role: Role::Assistant,
+            emotion: Some("嬉しい".to_string()),
+        };
+        repo.save_log(&assistant_log).await.unwrap();
+
+        let logs = repo.get_logs_by_session("ses-010").await.unwrap();
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].role, Role::User);
+        assert!(logs[0].emotion.is_none());
+        assert_eq!(logs[1].role, Role::Assistant);
+        assert_eq!(logs[1].emotion.as_deref(), Some("嬉しい"));
+    }
+
+    #[tokio::test]
     async fn save_log_with_optional_fields() {
         let pool = in_memory_pool().await;
         let repo = SqliteConversationRepository::new(pool.clone());
@@ -201,6 +249,8 @@ mod tests {
             input_tokens: Some(50),
             total_output_tokens: Some(30),
             timestamp: Utc::now(),
+            role: Role::Assistant,
+            emotion: Some("嬉しい".to_string()),
         };
 
         repo.save_log(&log).await.unwrap();
