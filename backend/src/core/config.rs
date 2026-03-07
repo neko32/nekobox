@@ -83,19 +83,24 @@ impl AppConfig {
             .into_owned()
     }
 
-    /// キャラクター設定ファイルから `system_prompt` をロードする
-    pub fn load_system_prompt(&self) -> Result<String, AppError> {
-        #[derive(Deserialize)]
-        struct CharSettings {
-            system_prompt: String,
-        }
+    /// キャラクタープロンプトファイルのパスを返す: `{settings_path}/{name}_{version}.md`
+    pub fn character_prompt_file(&self) -> String {
+        Path::new(&self.character.settings_path)
+            .join(format!(
+                "{}_{}.md",
+                self.character.name, self.character.version
+            ))
+            .to_string_lossy()
+            .into_owned()
+    }
 
-        let path = self.character_settings_file();
+    /// `{name}_{version}.md` を直接読み込んで system_prompt として返す。
+    /// ファイル内の `{{name}}` はユーザー名に置換される。
+    pub fn load_system_prompt(&self) -> Result<String, AppError> {
+        let path = self.character_prompt_file();
         let raw = std::fs::read_to_string(&path)
-            .map_err(|e| AppError::Config(format!("Cannot read character settings {path}: {e}")))?;
-        let settings: CharSettings = serde_json::from_str(&raw)
-            .map_err(|e| AppError::Config(format!("Invalid character settings JSON: {e}")))?;
-        Ok(settings.system_prompt)
+            .map_err(|e| AppError::Config(format!("Cannot read character prompt {path}: {e}")))?;
+        Ok(raw.replace("{{name}}", &self.user_name))
     }
 }
 
@@ -187,35 +192,51 @@ mod tests {
         assert!(path.contains("takochan_1.0.0.json"), "パス: {path}");
     }
 
+    // ── character_prompt_file ─────────────────────────────────
+
+    #[test]
+    fn character_prompt_file_contains_name_and_version() {
+        let tmp = tempdir().unwrap();
+        let cfg = make_config_in(tmp.path());
+        let path = cfg.character_prompt_file();
+        assert!(path.contains("takochan_1.0.0.md"), "パス: {path}");
+    }
+
     // ── load_system_prompt ────────────────────────────────────
 
     #[test]
     fn load_system_prompt_valid() {
         let tmp = tempdir().unwrap();
         std::fs::write(
-            tmp.path().join("takochan_1.0.0.json"),
-            r#"{"system_prompt":"あなたはたこちゃんです"}"#,
+            tmp.path().join("takochan_1.0.0.md"),
+            "あなたはたこちゃんです\n\n# キャラ設定\nかわいい",
         )
         .unwrap();
 
         let cfg = make_config_in(tmp.path());
         let prompt = cfg.load_system_prompt().unwrap();
-        assert_eq!(prompt, "あなたはたこちゃんです");
+        assert!(prompt.contains("あなたはたこちゃんです"));
+    }
+
+    #[test]
+    fn load_system_prompt_replaces_name_placeholder() {
+        let tmp = tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("takochan_1.0.0.md"),
+            "こんにちは、{{name}}さん！",
+        )
+        .unwrap();
+
+        let cfg = make_config_in(tmp.path());
+        let prompt = cfg.load_system_prompt().unwrap();
+        assert_eq!(prompt, "こんにちは、テストさん！");
     }
 
     #[test]
     fn load_system_prompt_missing_file_returns_err() {
         let cfg = make_config_in(std::path::Path::new("/nonexistent/nekobox_test_xyz"));
-        assert!(cfg.load_system_prompt().is_err());
-    }
-
-    #[test]
-    fn load_system_prompt_invalid_json_returns_err() {
-        let tmp = tempdir().unwrap();
-        std::fs::write(tmp.path().join("takochan_1.0.0.json"), "{{invalid}}").unwrap();
-
-        let cfg = make_config_in(tmp.path());
-        assert!(cfg.load_system_prompt().is_err());
+        let err = cfg.load_system_prompt().unwrap_err();
+        assert!(err.to_string().contains("Cannot read"));
     }
 
     // ── is_first_session ─────────────────────────────────────

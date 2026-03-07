@@ -41,9 +41,19 @@ public sealed class AppConfig
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsFirstSession => CurrentSession == "na";
 
-    /// <summary>キャラクター設定ファイルのフルパスを返す</summary>
-    public string GetCharacterSettingsFile() =>
-        Path.Combine(Character.SettingsPath, $"{Character.Name}_{Character.Version}.json");
+    /// <summary>キャラクタープロンプトファイルのフルパスを返す (.md)</summary>
+    public string GetCharacterPromptFile() =>
+        Path.Combine(Character.SettingsPath, $"{Character.Name}_{Character.Version}.md");
+
+    /// <summary>
+    /// キャラクタープロンプト (.md) を読み込み、{{name}} をユーザー名に置換して返す。
+    /// </summary>
+    public string LoadSystemPrompt()
+    {
+        var path = GetCharacterPromptFile();
+        var raw = File.ReadAllText(path);
+        return raw.Replace("{{name}}", UserName);
+    }
 
     // ──── 永続化 ─────────────────────────────────────────────
 
