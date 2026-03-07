@@ -14,18 +14,22 @@ impl SessionId {
         Ok(Self(id))
     }
 
+    #[must_use] 
     pub fn generate() -> Self {
         Self(uuid::Uuid::new_v4().to_string())
     }
 
+    #[must_use] 
     pub fn initial() -> Self {
         Self("na".into())
     }
 
+    #[must_use] 
     pub fn is_na(&self) -> bool {
         self.0 == "na"
     }
 
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -44,6 +48,7 @@ impl UserName {
         Ok(Self(name))
     }
 
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -62,6 +67,7 @@ impl CharacterName {
         Ok(Self(name))
     }
 
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -80,6 +86,7 @@ impl CharacterVersion {
         Ok(Self(version))
     }
 
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -108,6 +115,7 @@ pub enum Emotion {
 }
 
 impl Emotion {
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         match self {
             Self::Fun => "楽しい",
@@ -122,6 +130,7 @@ impl Emotion {
     }
 
     #[allow(clippy::should_implement_trait)]
+    #[must_use] 
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "楽しい" => Some(Self::Fun),

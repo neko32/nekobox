@@ -1,5 +1,8 @@
 use anyhow::Result;
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -53,7 +56,10 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .route("/v1/msg", post(routes::msg::msg_handler))
-        .route("/v1/sessions/{session_id}", get(routes::sessions::sessions_handler))
+        .route(
+            "/v1/sessions/{session_id}",
+            get(routes::sessions::sessions_handler),
+        )
         .with_state(state);
 
     // ローカルコンパニオンアプリのデフォルトは 127.0.0.1（ループバックのみ）。

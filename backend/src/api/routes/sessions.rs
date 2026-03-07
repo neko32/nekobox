@@ -37,15 +37,18 @@ pub async fn sessions_handler(
         .into_iter()
         .map(|log| SessionLogEntryDto {
             msg_sender_name: log.msg_sender_name,
-            user_name:       log.user_name,
-            msg:             log.msg,
-            timestamp:       log.timestamp.to_rfc3339(),
-            role:            log.role.as_str().to_string(),
-            emotion:         log.emotion,
+            user_name: log.user_name,
+            msg: log.msg,
+            timestamp: log.timestamp.to_rfc3339(),
+            role: log.role.as_str().to_string(),
+            emotion: log.emotion,
         })
         .collect();
 
-    Ok(Json(SessionHistoryResponse { session_id, entries }))
+    Ok(Json(SessionHistoryResponse {
+        session_id,
+        entries,
+    }))
 }
 
 #[cfg(test)]
@@ -93,23 +96,30 @@ mod tests {
         TestServer::new(app)
     }
 
-    fn sample_log(session_id: &str, sender: &str, user: &str, msg: &str, role: Role, emotion: Option<&str>) -> SessionLog {
+    fn sample_log(
+        session_id: &str,
+        sender: &str,
+        user: &str,
+        msg: &str,
+        role: Role,
+        emotion: Option<&str>,
+    ) -> SessionLog {
         SessionLog {
-            session_id:          session_id.to_string(),
-            session_alias:       None,
-            background_image:    "/bg.png".to_string(),
-            msg_sender_name:     sender.to_string(),
-            user_name:           user.to_string(),
-            settings_name:       "takochan_1.0.0".to_string(),
-            msg:                 msg.to_string(),
-            image_url:           None,
-            response_id:         None,
-            model_instance_id:   None,
-            input_tokens:        None,
+            session_id: session_id.to_string(),
+            session_alias: Some("test-alias".to_string()),
+            background_image: "/bg.png".to_string(),
+            msg_sender_name: sender.to_string(),
+            user_name: user.to_string(),
+            settings_name: "takochan_1.0.0".to_string(),
+            msg: msg.to_string(),
+            image_url: None,
+            response_id: None,
+            model_instance_id: None,
+            input_tokens: None,
             total_output_tokens: None,
-            timestamp:           chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
             role,
-            emotion:             emotion.map(str::to_string),
+            emotion: emotion.map(str::to_string),
         }
     }
 
@@ -122,7 +132,14 @@ mod tests {
             .returning(|_| {
                 Ok(vec![
                     sample_log("ses-001", "さのまる", "さのまる", "こんにちは", Role::User, None),
-                    sample_log("ses-001", "takochan", "さのまる", "やあ！", Role::Assistant, Some("嬉しい")),
+                    sample_log(
+                        "ses-001",
+                        "takochan",
+                        "さのまる",
+                        "やあ！",
+                        Role::Assistant,
+                        Some("嬉しい"),
+                    ),
                 ])
             });
 
