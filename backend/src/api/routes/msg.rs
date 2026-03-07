@@ -256,6 +256,7 @@ mod tests {
             db: Arc::new(db),
             lm_client: Arc::new(lm),
             app_config: config,
+            available_tools: vec![],
         });
         let app = Router::new()
             .route("/v1/msg", post(msg_handler))

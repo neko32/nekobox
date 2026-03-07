@@ -68,13 +68,13 @@ impl AppConfig {
     }
 
     /// 初回セッション（`current_session == "na"`）か
-    #[must_use] 
+    #[must_use]
     pub fn is_first_session(&self) -> bool {
         self.current_session == "na"
     }
 
     /// キャラクター設定ファイルのパスを返す: `{settings_path}/{name}_{version}.json`
-    #[must_use] 
+    #[must_use]
     pub fn character_settings_file(&self) -> String {
         Path::new(&self.character.settings_path)
             .join(format!(
@@ -86,7 +86,7 @@ impl AppConfig {
     }
 
     /// キャラクタープロンプトファイルのパスを返す: `{settings_path}/{name}_{version}.md`
-    #[must_use] 
+    #[must_use]
     pub fn character_prompt_file(&self) -> String {
         Path::new(&self.character.settings_path)
             .join(format!(

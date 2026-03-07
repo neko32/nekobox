@@ -90,6 +90,7 @@ fn make_server(pool: SqlitePool, lm: Arc<dyn LmStudioClient>, config: AppConfig)
         db: Arc::new(SqliteConversationRepository::new(pool)),
         lm_client: lm,
         app_config: config,
+        available_tools: vec![],
     });
     let app = Router::new()
         .route("/v1/msg", post(msg_handler))

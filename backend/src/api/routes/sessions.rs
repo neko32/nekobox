@@ -89,6 +89,7 @@ mod tests {
             db: Arc::new(db),
             lm_client: Arc::new(MockLmStudioClient::new()),
             app_config: make_config(),
+            available_tools: vec![],
         });
         let app = Router::new()
             .route("/v1/sessions/{session_id}", get(sessions_handler))
@@ -131,7 +132,14 @@ mod tests {
             .once()
             .returning(|_| {
                 Ok(vec![
-                    sample_log("ses-001", "さのまる", "さのまる", "こんにちは", Role::User, None),
+                    sample_log(
+                        "ses-001",
+                        "さのまる",
+                        "さのまる",
+                        "こんにちは",
+                        Role::User,
+                        None,
+                    ),
                     sample_log(
                         "ses-001",
                         "takochan",

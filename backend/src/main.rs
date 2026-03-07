@@ -15,6 +15,7 @@ use nekobox_backend::{
     core::{
         config::AppConfig,
         db::{ConversationRepository, SqliteConversationRepository},
+        mcp::{McpToolProvider, UvMcpToolProvider},
     },
     AppState,
 };
@@ -48,10 +49,24 @@ async fn main() -> Result<()> {
     let lm_base_url = format!("http://{lm_host}:{lm_port}");
     let lm_client: Arc<dyn LmStudioClient> = Arc::new(HttpLmStudioClient::new(lm_base_url));
 
+    // MCP ツールリスト取得（失敗時は空リストで続行）
+    let mcp_provider = UvMcpToolProvider;
+    let available_tools = match mcp_provider.list_tools().await {
+        Ok(tools) => {
+            info!("MCP tools loaded: {:?}", tools);
+            tools
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load MCP tools, continuing with empty list: {e}");
+            vec![]
+        }
+    };
+
     let state = Arc::new(AppState {
         db,
         lm_client,
         app_config,
+        available_tools,
     });
 
     let app = Router::new()
