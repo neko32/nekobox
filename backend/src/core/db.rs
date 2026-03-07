@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
 
-use crate::core::{error::AppError, models::{Role, SessionLog}};
+use crate::core::{
+    error::AppError,
+    models::{Role, SessionLog},
+};
 
 /// 会話ログ永続化のトレイト（モック・スタブ差し替え可能）
 #[cfg_attr(test, mockall::automock)]
@@ -17,7 +20,7 @@ pub struct SqliteConversationRepository {
 }
 
 impl SqliteConversationRepository {
-    #[must_use] 
+    #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
@@ -97,7 +100,7 @@ impl ConversationRepository for SqliteConversationRepository {
                     total_output_tokens: r.get("total_output_tokens"),
                     timestamp,
                     role,
-                    emotion:             r.get("emotion"),
+                    emotion: r.get("emotion"),
                 })
             })
             .collect()

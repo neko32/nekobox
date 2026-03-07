@@ -21,6 +21,9 @@ pub enum AppError {
 
     #[error("Validation error: {0}")]
     Validation(String),
+
+    #[error("MCP error: {0}")]
+    Mcp(String),
 }
 
 impl IntoResponse for AppError {
@@ -31,6 +34,7 @@ impl IntoResponse for AppError {
             AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "CONFIG_ERROR"),
             AppError::HttpRequest(_) => (StatusCode::BAD_GATEWAY, "HTTP_REQUEST_ERROR"),
             AppError::Validation(_) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR"),
+            AppError::Mcp(_) => (StatusCode::INTERNAL_SERVER_ERROR, "MCP_ERROR"),
         };
         let message = self.to_string();
         (
@@ -85,5 +89,13 @@ mod tests {
     fn error_display_contains_message() {
         let err = AppError::LmStudio("接続失敗".into());
         assert!(err.to_string().contains("接続失敗"));
+    }
+
+    #[test]
+    fn mcp_error_returns_500() {
+        assert_eq!(
+            status_of(AppError::Mcp("uv not found".into())),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 }

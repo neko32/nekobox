@@ -60,7 +60,7 @@ pub struct HttpLmStudioClient {
 }
 
 impl HttpLmStudioClient {
-    #[must_use] 
+    #[must_use]
     pub fn new(base_url: String) -> Self {
         Self {
             client: reqwest::Client::new(),
