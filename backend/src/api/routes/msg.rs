@@ -209,10 +209,9 @@ mod tests {
     /// テスト用の一時設定ファイルを作成して AppConfig を返す
     fn make_config() -> (AppConfig, tempfile::TempDir) {
         let tmp = tempfile::tempdir().unwrap();
-        let settings_json =
-            r#"{"system_prompt":"あなたはたこちゃんです。JSON形式で答えてください。"}"#;
-        let settings_file = tmp.path().join("takochan_1.0.0.json");
-        std::fs::write(&settings_file, settings_json).unwrap();
+        let prompt_md = "あなたはたこちゃんです。JSON形式で答えてください。";
+        let prompt_file = tmp.path().join("takochan_1.0.0.md");
+        std::fs::write(&prompt_file, prompt_md).unwrap();
 
         let cfg = AppConfig {
             current_session: "ses-001".to_string(),

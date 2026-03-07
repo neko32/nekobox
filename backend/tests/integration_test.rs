@@ -69,8 +69,8 @@ async fn setup_db() -> SqlitePool {
 }
 
 fn make_config(settings_dir: &std::path::Path) -> AppConfig {
-    let json = r#"{"system_prompt":"あなたはたこちゃんです。JSON形式で答えてください。"}"#;
-    std::fs::write(settings_dir.join("takochan_1.0.0.json"), json).unwrap();
+    let prompt_md = "あなたはたこちゃんです。JSON形式で答えてください。";
+    std::fs::write(settings_dir.join("takochan_1.0.0.md"), prompt_md).unwrap();
     AppConfig {
         current_session: "ses-it-001".to_string(),
         user_name: "さのまる".to_string(),
