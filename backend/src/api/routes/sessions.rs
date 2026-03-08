@@ -17,6 +17,7 @@ pub struct SessionLogEntryDto {
     pub timestamp: String,
     pub role: String,
     pub emotion: Option<String>,
+    pub turn_number: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -42,6 +43,7 @@ pub async fn sessions_handler(
             timestamp: log.timestamp.to_rfc3339(),
             role: log.role.as_str().to_string(),
             emotion: log.emotion,
+            turn_number: log.turn_number,
         })
         .collect();
 
@@ -104,6 +106,7 @@ mod tests {
         msg: &str,
         role: Role,
         emotion: Option<&str>,
+        turn_number: i64,
     ) -> SessionLog {
         SessionLog {
             session_id: session_id.to_string(),
@@ -121,6 +124,7 @@ mod tests {
             timestamp: chrono::Utc::now(),
             role,
             emotion: emotion.map(str::to_string),
+            turn_number,
         }
     }
 
@@ -139,6 +143,7 @@ mod tests {
                         "こんにちは",
                         Role::User,
                         None,
+                        1,
                     ),
                     sample_log(
                         "ses-001",
@@ -147,6 +152,7 @@ mod tests {
                         "やあ！",
                         Role::Assistant,
                         Some("嬉しい"),
+                        1,
                     ),
                 ])
             });
@@ -164,6 +170,9 @@ mod tests {
         assert_eq!(json["entries"][1]["msg"], "やあ！");
         assert_eq!(json["entries"][1]["role"], "assistant");
         assert_eq!(json["entries"][1]["emotion"], "嬉しい");
+        // T7: turn_number がレスポンスに含まれること
+        assert_eq!(json["entries"][0]["turn_number"], 1);
+        assert_eq!(json["entries"][1]["turn_number"], 1);
     }
 
     #[tokio::test]
