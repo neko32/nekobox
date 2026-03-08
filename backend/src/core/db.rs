@@ -329,14 +329,34 @@ mod tests {
         let pool = in_memory_pool().await;
         let repo = SqliteConversationRepository::new(pool);
 
-        repo.save_log(&SessionLog { turn_number: 1, role: Role::User, ..sample_log("ses-t3", "1回目") })
-            .await.unwrap();
-        repo.save_log(&SessionLog { turn_number: 1, role: Role::Assistant, ..sample_log("ses-t3", "返答1") })
-            .await.unwrap();
-        repo.save_log(&SessionLog { turn_number: 2, role: Role::User, ..sample_log("ses-t3", "2回目") })
-            .await.unwrap();
-        repo.save_log(&SessionLog { turn_number: 2, role: Role::Assistant, ..sample_log("ses-t3", "返答2") })
-            .await.unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-t3", "1回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::Assistant,
+            ..sample_log("ses-t3", "返答1")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::User,
+            ..sample_log("ses-t3", "2回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::Assistant,
+            ..sample_log("ses-t3", "返答2")
+        })
+        .await
+        .unwrap();
 
         let turn = repo.get_current_turn("ses-t3").await.unwrap();
         assert_eq!(turn, 2);
@@ -352,10 +372,20 @@ mod tests {
         let pool = in_memory_pool().await;
         let repo = SqliteConversationRepository::new(pool);
 
-        repo.save_log(&SessionLog { turn_number: 1, role: Role::User, ..sample_log("ses-t4", "1回目") })
-            .await.unwrap();
-        repo.save_log(&SessionLog { turn_number: 2, role: Role::User, ..sample_log("ses-t4", "2回目") })
-            .await.unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-t4", "1回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::User,
+            ..sample_log("ses-t4", "2回目")
+        })
+        .await
+        .unwrap();
 
         let turn = repo.get_current_turn("ses-t4").await.unwrap();
         assert_eq!(turn, 2);
@@ -373,12 +403,24 @@ mod tests {
 
         // セッションA: 3ターン
         for t in 1i64..=3 {
-            repo.save_log(&SessionLog { session_id: "ses-a".into(), turn_number: t, role: Role::User, ..sample_log("ses-a", "msg") })
-                .await.unwrap();
+            repo.save_log(&SessionLog {
+                session_id: "ses-a".into(),
+                turn_number: t,
+                role: Role::User,
+                ..sample_log("ses-a", "msg")
+            })
+            .await
+            .unwrap();
         }
         // セッションB: 1ターン
-        repo.save_log(&SessionLog { session_id: "ses-b".into(), turn_number: 1, role: Role::User, ..sample_log("ses-b", "msg") })
-            .await.unwrap();
+        repo.save_log(&SessionLog {
+            session_id: "ses-b".into(),
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-b", "msg")
+        })
+        .await
+        .unwrap();
 
         assert_eq!(repo.get_current_turn("ses-a").await.unwrap(), 3);
         assert_eq!(repo.get_current_turn("ses-b").await.unwrap(), 1);

@@ -449,7 +449,11 @@ mod tests {
 
         let (cfg, _tmp) = make_config();
         let server = make_server(lm, db, cfg);
-        server.post("/v1/msg").json(&valid_body()).await.assert_status(StatusCode::OK);
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
 
         // ターン2: get_current_turn=1 → save_log は turn_number=2 で呼ばれるはず
         let mut lm2 = MockLmStudioClient::new();
@@ -465,6 +469,10 @@ mod tests {
 
         let (cfg2, _tmp2) = make_config();
         let server2 = make_server(lm2, db2, cfg2);
-        server2.post("/v1/msg").json(&valid_body()).await.assert_status(StatusCode::OK);
+        server2
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
     }
 }
