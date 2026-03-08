@@ -108,6 +108,9 @@ pub async fn msg_handler(
         .clone()
         .unwrap_or_default();
 
+    // 新しいターン番号を算出（現在の最大ターン + 1）
+    let turn_number = state.db.get_current_turn(&req.session_id).await? + 1;
+
     // ユーザーメッセージをDBに保存
     state
         .db
@@ -127,10 +130,11 @@ pub async fn msg_handler(
             timestamp: Utc::now(),
             role: Role::User,
             emotion: None,
+            turn_number,
         })
         .await?;
 
-    // キャラクターのレスポンスをDBに保存
+    // キャラクターのレスポンスをDBに保存（同じターン番号）
     state
         .db
         .save_log(&SessionLog {
@@ -149,6 +153,7 @@ pub async fn msg_handler(
             timestamp: Utc::now(),
             role: Role::Assistant,
             emotion: Some(emotion.as_str().to_string()),
+            turn_number,
         })
         .await?;
 
@@ -332,6 +337,7 @@ mod tests {
             .once()
             .returning(|_| Ok(lm_response("はじめまして！", "嬉しい")));
         let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
         db.expect_save_log().times(2).returning(|_| Ok(()));
 
         let (cfg, _tmp) = make_config();
@@ -398,7 +404,7 @@ mod tests {
         lm.expect_chat()
             .once()
             .returning(|_| Err(crate::core::error::AppError::LmStudio("接続失敗".into())));
-
+        // LM Studioのエラーはget_current_turnより前に発生するためDBは呼ばれない
         let (cfg, _tmp) = make_config();
         let server = make_server(lm, MockConversationRepository::new(), cfg);
         server
@@ -415,6 +421,7 @@ mod tests {
             .once()
             .returning(|_| Ok(lm_response("やあ！", "楽しい")));
         let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
         db.expect_save_log().times(2).returning(|_| Ok(()));
 
         let (cfg, _tmp) = make_config();
@@ -423,5 +430,49 @@ mod tests {
 
         let json = res.json::<serde_json::Value>();
         assert_eq!(json["response_id"], "resp-001");
+    }
+
+    /// T5相当: 新規セッション（turn=0）で1ターン目、既存セッション（turn=1）で2ターン目
+    #[tokio::test]
+    async fn msg_handler_assigns_correct_turn_number() {
+        // ターン1: get_current_turn=0 → save_log は turn_number=1 で呼ばれるはず
+        let mut lm = MockLmStudioClient::new();
+        lm.expect_chat()
+            .once()
+            .returning(|_| Ok(lm_response("1回目の返答", "嬉しい")));
+        let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
+        db.expect_save_log()
+            .times(2)
+            .withf(|log| log.turn_number == 1)
+            .returning(|_| Ok(()));
+
+        let (cfg, _tmp) = make_config();
+        let server = make_server(lm, db, cfg);
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
+
+        // ターン2: get_current_turn=1 → save_log は turn_number=2 で呼ばれるはず
+        let mut lm2 = MockLmStudioClient::new();
+        lm2.expect_chat()
+            .once()
+            .returning(|_| Ok(lm_response("2回目の返答", "楽しい")));
+        let mut db2 = MockConversationRepository::new();
+        db2.expect_get_current_turn().once().returning(|_| Ok(1));
+        db2.expect_save_log()
+            .times(2)
+            .withf(|log| log.turn_number == 2)
+            .returning(|_| Ok(()));
+
+        let (cfg2, _tmp2) = make_config();
+        let server2 = make_server(lm2, db2, cfg2);
+        server2
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
     }
 }

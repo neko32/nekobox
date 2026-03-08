@@ -13,6 +13,8 @@ use crate::core::{
 pub trait ConversationRepository: Send + Sync {
     async fn save_log(&self, log: &SessionLog) -> Result<(), AppError>;
     async fn get_logs_by_session(&self, session_id: &str) -> Result<Vec<SessionLog>, AppError>;
+    /// `session_id` に対応する現在の最大 `turn_number` を返す。レコード無しなら 0。
+    async fn get_current_turn(&self, session_id: &str) -> Result<i64, AppError>;
 }
 
 pub struct SqliteConversationRepository {
@@ -36,8 +38,8 @@ impl ConversationRepository for SqliteConversationRepository {
                 session_id, session_alias, background_image, msg_sender_name, user_name,
                 settings_name, msg, image_url, response_id,
                 model_instance_id, input_tokens, total_output_tokens, timestamp,
-                role, emotion
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                role, emotion, turn_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
         )
         .bind(&log.session_id)
@@ -55,6 +57,7 @@ impl ConversationRepository for SqliteConversationRepository {
         .bind(&timestamp)
         .bind(log.role.as_str())
         .bind(&log.emotion)
+        .bind(log.turn_number)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -66,7 +69,7 @@ impl ConversationRepository for SqliteConversationRepository {
             SELECT session_id, session_alias, background_image, msg_sender_name, user_name,
                    settings_name, msg, image_url, response_id,
                    model_instance_id, input_tokens, total_output_tokens, timestamp,
-                   role, emotion
+                   role, emotion, turn_number
             FROM session
             WHERE session_id = ?
             ORDER BY timestamp ASC
@@ -101,9 +104,19 @@ impl ConversationRepository for SqliteConversationRepository {
                     timestamp,
                     role,
                     emotion: r.get("emotion"),
+                    turn_number: r.get("turn_number"),
                 })
             })
             .collect()
+    }
+
+    async fn get_current_turn(&self, session_id: &str) -> Result<i64, AppError> {
+        let turn: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(turn_number) FROM session WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(turn.unwrap_or(0))
     }
 }
 
@@ -131,7 +144,8 @@ mod tests {
                 total_output_tokens INTEGER,
                 timestamp           DATETIME NOT NULL,
                 role                VARCHAR NOT NULL DEFAULT 'user',
-                emotion             VARCHAR
+                emotion             VARCHAR,
+                turn_number         INTEGER NOT NULL DEFAULT 0
             )",
         )
         .execute(&pool)
@@ -157,6 +171,7 @@ mod tests {
             timestamp: Utc::now(),
             role: Role::User,
             emotion: None,
+            turn_number: 1,
         }
     }
 
@@ -222,6 +237,7 @@ mod tests {
             timestamp: Utc::now(),
             role: Role::Assistant,
             emotion: Some("嬉しい".to_string()),
+            turn_number: 1,
         };
         repo.save_log(&assistant_log).await.unwrap();
 
@@ -254,6 +270,7 @@ mod tests {
             timestamp: Utc::now(),
             role: Role::Assistant,
             emotion: Some("嬉しい".to_string()),
+            turn_number: 1,
         };
 
         repo.save_log(&log).await.unwrap();
@@ -263,5 +280,149 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    // ── get_current_turn のテスト (ぐんまちゃんT1〜T6) ──────────────────────
+
+    /// T1: セッション新規 → get_current_turn が 0 を返す
+    #[tokio::test]
+    async fn get_current_turn_returns_zero_for_new_session() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool);
+
+        let turn = repo.get_current_turn("ses-new").await.unwrap();
+        assert_eq!(turn, 0);
+    }
+
+    /// T2: user+assistant 保存後 → 両者が turn_number=1、get_current_turn=1
+    #[tokio::test]
+    async fn get_current_turn_returns_one_after_first_exchange() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool);
+
+        let user_log = SessionLog {
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-t2", "こんにちは")
+        };
+        let assistant_log = SessionLog {
+            turn_number: 1,
+            role: Role::Assistant,
+            msg_sender_name: "takochan".to_string(),
+            ..sample_log("ses-t2", "やあ！")
+        };
+
+        repo.save_log(&user_log).await.unwrap();
+        repo.save_log(&assistant_log).await.unwrap();
+
+        let turn = repo.get_current_turn("ses-t2").await.unwrap();
+        assert_eq!(turn, 1);
+
+        let logs = repo.get_logs_by_session("ses-t2").await.unwrap();
+        assert_eq!(logs[0].turn_number, 1);
+        assert_eq!(logs[1].turn_number, 1);
+    }
+
+    /// T3: 2ターン目 → 2回目のuserが turn_number=2
+    #[tokio::test]
+    async fn get_current_turn_increments_for_second_exchange() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool);
+
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-t3", "1回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::Assistant,
+            ..sample_log("ses-t3", "返答1")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::User,
+            ..sample_log("ses-t3", "2回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::Assistant,
+            ..sample_log("ses-t3", "返答2")
+        })
+        .await
+        .unwrap();
+
+        let turn = repo.get_current_turn("ses-t3").await.unwrap();
+        assert_eq!(turn, 2);
+
+        let logs = repo.get_logs_by_session("ses-t3").await.unwrap();
+        assert_eq!(logs[2].turn_number, 2);
+        assert_eq!(logs[3].turn_number, 2);
+    }
+
+    /// T4: userが連続2回（パターン3: 返事喪失）→ 2件目userが turn_number=2
+    #[tokio::test]
+    async fn consecutive_user_messages_get_different_turns() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool);
+
+        repo.save_log(&SessionLog {
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-t4", "1回目")
+        })
+        .await
+        .unwrap();
+        repo.save_log(&SessionLog {
+            turn_number: 2,
+            role: Role::User,
+            ..sample_log("ses-t4", "2回目")
+        })
+        .await
+        .unwrap();
+
+        let turn = repo.get_current_turn("ses-t4").await.unwrap();
+        assert_eq!(turn, 2);
+
+        let logs = repo.get_logs_by_session("ses-t4").await.unwrap();
+        assert_eq!(logs[0].turn_number, 1);
+        assert_eq!(logs[1].turn_number, 2);
+    }
+
+    /// T6: 複数セッション分離 → 別セッションのターン番号が混在しない
+    #[tokio::test]
+    async fn turn_numbers_are_isolated_per_session() {
+        let pool = in_memory_pool().await;
+        let repo = SqliteConversationRepository::new(pool);
+
+        // セッションA: 3ターン
+        for t in 1i64..=3 {
+            repo.save_log(&SessionLog {
+                session_id: "ses-a".into(),
+                turn_number: t,
+                role: Role::User,
+                ..sample_log("ses-a", "msg")
+            })
+            .await
+            .unwrap();
+        }
+        // セッションB: 1ターン
+        repo.save_log(&SessionLog {
+            session_id: "ses-b".into(),
+            turn_number: 1,
+            role: Role::User,
+            ..sample_log("ses-b", "msg")
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(repo.get_current_turn("ses-a").await.unwrap(), 3);
+        assert_eq!(repo.get_current_turn("ses-b").await.unwrap(), 1);
     }
 }

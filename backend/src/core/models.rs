@@ -275,6 +275,16 @@ mod tests {
     }
 
     #[test]
+    fn role_tool_as_str() {
+        assert_eq!(Role::Tool.as_str(), "tool");
+    }
+
+    #[test]
+    fn role_from_str_tool() {
+        assert_eq!(Role::from_str("tool"), Some(Role::Tool));
+    }
+
+    #[test]
     fn role_from_str_unknown_returns_none() {
         assert!(Role::from_str("unknown").is_none());
     }
@@ -287,21 +297,27 @@ pub enum Role {
     User,
     #[serde(rename = "assistant")]
     Assistant,
+    #[serde(rename = "tool")]
+    Tool,
 }
 
 impl Role {
+    #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
             Self::User => "user",
             Self::Assistant => "assistant",
+            Self::Tool => "tool",
         }
     }
 
+    #[must_use]
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "user" => Some(Self::User),
             "assistant" => Some(Self::Assistant),
+            "tool" => Some(Self::Tool),
             _ => None,
         }
     }
@@ -325,4 +341,5 @@ pub struct SessionLog {
     pub timestamp: DateTime<Utc>,
     pub role: Role,
     pub emotion: Option<String>,
+    pub turn_number: i64,
 }
