@@ -4,13 +4,17 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
-    api::lm_studio::{ChatMessage, ChatRequest},
+    api::lm_studio::{ChatMessage, ChatRequest, FunctionSpec, ToolSpec},
     core::{
         error::AppError,
+        mcp::McpToolDefinition,
         models::{Emotion, Role, SessionLog},
     },
     AppState,
 };
+
+/// ツール呼び出しの最大ループ回数（無限ループ防止）
+const MAX_TOOL_ITERATIONS: usize = 5;
 
 // ───────────────────────────────────── Request / Response ──────────────────
 
@@ -47,6 +51,7 @@ struct LmJsonContent {
 
 // ───────────────────────────────────── ハンドラ ────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn msg_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<MsgRequest>,
@@ -65,53 +70,47 @@ pub async fn msg_handler(
     // system_prompt をキャラクター設定ファイルからロード
     let system_prompt = state.app_config.load_system_prompt()?;
 
-    // LM Studio へ送るメッセージを構築
-    let messages = vec![
+    // LM Studio へ送る初期メッセージを構築
+    let mut messages = vec![
         ChatMessage {
             role: "system".to_string(),
-            content: system_prompt,
+            content: Some(system_prompt),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
         },
         ChatMessage {
             role: "user".to_string(),
-            content: req.message.clone(),
+            content: Some(req.message.clone()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
         },
     ];
 
-    let lm_request = ChatRequest {
+    // 利用可能なツールを OpenAI function calling 形式に変換
+    let tools = build_tool_specs(&state.available_tools);
+    let tool_choice = tools.as_ref().map(|_| "auto".to_string());
+
+    // ── 最初の LM Studio 呼び出し（エラー時は DB に書き込まない）──
+    let first_request = ChatRequest {
         model: state.app_config.character.name.clone(),
-        messages,
+        messages: messages.clone(),
         temperature: state.app_config.model.temperature,
+        tools: tools.clone(),
+        tool_choice: tool_choice.clone(),
     };
+    let mut lm_response = state.lm_client.chat(first_request).await?;
 
-    // LM Studio にリクエスト送信
-    let lm_response = state.lm_client.chat(lm_request).await?;
-
-    let new_response_id = Some(lm_response.id.clone());
-    let model_instance_id = lm_response.model.clone();
-    let (input_tokens, output_tokens) = lm_response
-        .usage
-        .as_ref()
-        .map_or((None, None), |u| (u.prompt_tokens, u.completion_tokens));
-
-    let raw_content = lm_response
-        .choices
-        .first()
-        .map(|c| c.message.content.clone())
-        .unwrap_or_default();
-
-    // LM Studio レスポンスから message と emotion を抽出
-    let (character_message, emotion) = parse_lm_response(&raw_content);
+    // 最初の LM 呼び出し成功後にターン番号を算出し、ユーザーメッセージを保存
     let settings_name = format!("{}_{}", req.character_name, req.version);
     let bg = state
         .app_config
         .background_image
         .clone()
         .unwrap_or_default();
-
-    // 新しいターン番号を算出（現在の最大ターン + 1）
     let turn_number = state.db.get_current_turn(&req.session_id).await? + 1;
 
-    // ユーザーメッセージをDBに保存
     state
         .db
         .save_log(&SessionLog {
@@ -133,6 +132,107 @@ pub async fn msg_handler(
             turn_number,
         })
         .await?;
+
+    // ── ツール呼び出しループ ────────────────────────────────────────────────
+    // ツールループ中は turn_number を変えない（同一ターン内の処理）
+    let (final_resp_id, final_model, final_usage, final_content) = 'tool_loop: {
+        for _iteration in 0..MAX_TOOL_ITERATIONS {
+            let resp_id = lm_response.id.clone();
+            let resp_model = lm_response.model.clone();
+            let resp_usage = lm_response.usage;
+
+            let choice = lm_response.choices.into_iter().next().ok_or_else(|| {
+                AppError::LmStudio("LM Studioのレスポンスにchoicesがありません".into())
+            })?;
+
+            // tool_calls がない、または空の場合は最終レスポンスとして break
+            let has_tool_calls = choice
+                .message
+                .tool_calls
+                .as_ref()
+                .is_some_and(|v| !v.is_empty());
+
+            if !has_tool_calls {
+                break 'tool_loop (resp_id, resp_model, resp_usage, choice.message.content);
+            }
+
+            // ─ ツール呼び出し処理 ─
+            let tool_calls = choice.message.tool_calls.clone().unwrap_or_default();
+
+            // アシスタントのメッセージ（tool_calls 付き）を会話履歴に追加
+            messages.push(choice.message);
+
+            for tc in &tool_calls {
+                let args: serde_json::Value =
+                    serde_json::from_str(&tc.function.arguments).unwrap_or_default();
+
+                let server_cmd = find_server_command(&state.available_tools, &tc.function.name);
+
+                // MCP サーバーを呼び出す（エラーはテキストとして処理を継続）
+                let tool_result = state
+                    .mcp_provider
+                    .call_tool(&server_cmd, &tc.function.name, args)
+                    .await
+                    .unwrap_or_else(|e| format!("ツールエラー: {e}"));
+
+                // ツール結果を DB に保存（同一ターン番号）
+                state
+                    .db
+                    .save_log(&SessionLog {
+                        session_id: req.session_id.clone(),
+                        session_alias: req.session_alias.clone(),
+                        background_image: bg.clone(),
+                        msg_sender_name: tc.function.name.clone(),
+                        user_name: req.user_name.clone(),
+                        settings_name: settings_name.clone(),
+                        msg: tool_result.clone(),
+                        image_url: None,
+                        response_id: None,
+                        model_instance_id: None,
+                        input_tokens: None,
+                        total_output_tokens: None,
+                        timestamp: Utc::now(),
+                        role: Role::Tool,
+                        emotion: None,
+                        turn_number,
+                    })
+                    .await?;
+
+                // ツール結果を会話履歴に追加
+                messages.push(ChatMessage {
+                    role: "tool".to_string(),
+                    content: Some(tool_result),
+                    tool_calls: None,
+                    tool_call_id: Some(tc.id.clone()),
+                    name: Some(tc.function.name.clone()),
+                });
+            }
+
+            // 更新した会話履歴で LM Studio を再度呼び出す
+            let next_request = ChatRequest {
+                model: state.app_config.character.name.clone(),
+                messages: messages.clone(),
+                temperature: state.app_config.model.temperature,
+                tools: tools.clone(),
+                tool_choice: tool_choice.clone(),
+            };
+            lm_response = state.lm_client.chat(next_request).await?;
+        }
+
+        return Err(AppError::LmStudio(
+            "ツールループが最大イテレーション数を超えました".into(),
+        ));
+    };
+
+    let new_response_id = Some(final_resp_id);
+    let model_instance_id = final_model;
+    let (input_tokens, output_tokens) = final_usage
+        .as_ref()
+        .map_or((None, None), |u| (u.prompt_tokens, u.completion_tokens));
+
+    // LM Studio レスポンスから message と emotion を抽出
+    let raw_content = final_content.unwrap_or_default();
+    let (character_message, emotion) = parse_lm_response(&raw_content);
 
     // キャラクターのレスポンスをDBに保存（同じターン番号）
     state
@@ -167,6 +267,36 @@ pub async fn msg_handler(
         message: character_message,
         emotion: emotion.as_str().to_string(),
     }))
+}
+
+// ───────────────────────────────────── ヘルパー ────────────────────────────
+
+/// 利用可能なツール定義を LM Studio 用の ToolSpec リストに変換する
+fn build_tool_specs(tools: &[McpToolDefinition]) -> Option<Vec<ToolSpec>> {
+    if tools.is_empty() {
+        return None;
+    }
+    Some(
+        tools
+            .iter()
+            .map(|t| ToolSpec {
+                spec_type: "function".to_string(),
+                function: FunctionSpec {
+                    name: t.name.clone(),
+                    description: t.description.clone(),
+                    parameters: t.input_schema.clone(),
+                },
+            })
+            .collect(),
+    )
+}
+
+/// ツール名からサーバーコマンドを検索する（見つからなければツール名をそのまま返す）
+fn find_server_command(tools: &[McpToolDefinition], tool_name: &str) -> String {
+    tools
+        .iter()
+        .find(|t| t.name == tool_name)
+        .map_or_else(|| tool_name.to_string(), |t| t.server_command.clone())
 }
 
 /// LM Studio が返す JSON コンテンツをパースして (message, emotion) を返す
@@ -209,6 +339,7 @@ mod tests {
         core::{
             config::{AppConfig, CharacterConfig, ModelConfig},
             db::MockConversationRepository,
+            mcp::MockMcpToolProvider,
         },
         AppState,
     };
@@ -243,7 +374,10 @@ mod tests {
             choices: vec![ChatChoice {
                 message: crate::api::lm_studio::ChatMessage {
                     role: "assistant".to_string(),
-                    content: format!(r#"{{"message":"{msg}","emotion":"{emotion}"}}"#),
+                    content: Some(format!(r#"{{"message":"{msg}","emotion":"{emotion}"}}"#)),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
                 },
                 finish_reason: Some("stop".to_string()),
             }],
@@ -262,6 +396,7 @@ mod tests {
             lm_client: Arc::new(lm),
             app_config: config,
             available_tools: vec![],
+            mcp_provider: Arc::new(MockMcpToolProvider::new()),
         });
         let app = Router::new()
             .route("/v1/msg", post(msg_handler))
@@ -474,5 +609,113 @@ mod tests {
             .json(&valid_body())
             .await
             .assert_status(StatusCode::OK);
+    }
+
+    /// ツール呼び出しループ: LMがtool_callsを返し、ツール実行後に最終レスポンスを返すケース
+    #[tokio::test]
+    async fn msg_handler_executes_tool_call_and_returns_final_response() {
+        use crate::api::lm_studio::{ToolCall, ToolCallFunction};
+        use crate::core::mcp::McpToolDefinition;
+
+        // 1回目: tool_calls を返す
+        let tool_call_response = ChatResponse {
+            id: "resp-tool".to_string(),
+            choices: vec![ChatChoice {
+                message: ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    tool_calls: Some(vec![ToolCall {
+                        id: "call-001".to_string(),
+                        call_type: "function".to_string(),
+                        function: ToolCallFunction {
+                            name: "weather_get".to_string(),
+                            arguments: r#"{"city":"Tokyo"}"#.to_string(),
+                        },
+                    }]),
+                    tool_call_id: None,
+                    name: None,
+                },
+                finish_reason: Some("tool_calls".to_string()),
+            }],
+            usage: None,
+            model: Some("takochan".to_string()),
+        };
+
+        // 2回目: 最終レスポンス
+        let final_response = lm_response("東京は晴れです！", "嬉しい");
+
+        let mut lm = MockLmStudioClient::new();
+        let mut call_count = 0usize;
+        lm.expect_chat().times(2).returning(move |_| {
+            call_count += 1;
+            if call_count == 1 {
+                Ok(ChatResponse {
+                    id: "resp-tool".to_string(),
+                    choices: vec![ChatChoice {
+                        message: ChatMessage {
+                            role: "assistant".to_string(),
+                            content: None,
+                            tool_calls: Some(vec![ToolCall {
+                                id: "call-001".to_string(),
+                                call_type: "function".to_string(),
+                                function: ToolCallFunction {
+                                    name: "weather_get".to_string(),
+                                    arguments: r#"{"city":"Tokyo"}"#.to_string(),
+                                },
+                            }]),
+                            tool_call_id: None,
+                            name: None,
+                        },
+                        finish_reason: Some("tool_calls".to_string()),
+                    }],
+                    usage: None,
+                    model: Some("takochan".to_string()),
+                })
+            } else {
+                Ok(lm_response("東京は晴れです！", "嬉しい"))
+            }
+        });
+
+        let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
+        // user(1) + tool(1) + assistant(1) = 3回 save_log が呼ばれる
+        db.expect_save_log()
+            .times(3)
+            .withf(|log| log.turn_number == 1)
+            .returning(|_| Ok(()));
+
+        let mut mcp = MockMcpToolProvider::new();
+        mcp.expect_call_tool()
+            .once()
+            .returning(|_, _, _| Ok("東京の天気: 晴れ, 25℃".to_string()));
+
+        let (cfg, _tmp) = make_config();
+        let tool_def = McpToolDefinition {
+            name: "weather_get".to_string(),
+            description: Some("天気を取得する".to_string()),
+            input_schema: serde_json::json!({}),
+            server_command: "weather-mcp".to_string(),
+        };
+        let state = Arc::new(AppState {
+            db: Arc::new(db),
+            lm_client: Arc::new(lm),
+            app_config: cfg,
+            available_tools: vec![tool_def],
+            mcp_provider: Arc::new(mcp),
+        });
+
+        let _ = tool_call_response; // suppress unused warning
+        let _ = final_response;
+
+        let app = Router::new()
+            .route("/v1/msg", post(msg_handler))
+            .with_state(state);
+        let server = TestServer::new(app);
+
+        let res = server.post("/v1/msg").json(&valid_body()).await;
+        res.assert_status(StatusCode::OK);
+        let json = res.json::<serde_json::Value>();
+        assert_eq!(json["message"], "東京は晴れです！");
+        assert_eq!(json["emotion"], "嬉しい");
     }
 }

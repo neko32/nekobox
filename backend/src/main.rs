@@ -15,7 +15,7 @@ use nekobox_backend::{
     core::{
         config::AppConfig,
         db::{ConversationRepository, SqliteConversationRepository},
-        mcp::{McpToolProvider, UvMcpToolProvider},
+        mcp::{parse_uv_tool_list, McpToolProvider, UvMcpToolProvider},
     },
     AppState,
 };
@@ -49,24 +49,19 @@ async fn main() -> Result<()> {
     let lm_base_url = format!("http://{lm_host}:{lm_port}");
     let lm_client: Arc<dyn LmStudioClient> = Arc::new(HttpLmStudioClient::new(lm_base_url));
 
-    // MCP ツールリスト取得（失敗時は空リストで続行）
-    let mcp_provider = UvMcpToolProvider;
-    let available_tools = match mcp_provider.list_tools().await {
-        Ok(tools) => {
-            info!("MCP tools loaded: {:?}", tools);
-            tools
-        }
-        Err(e) => {
-            tracing::warn!("Failed to load MCP tools, continuing with empty list: {e}");
-            vec![]
-        }
-    };
+    // MCP プロバイダー初期化
+    let mcp_provider: Arc<dyn McpToolProvider> = Arc::new(UvMcpToolProvider);
+
+    // uv tool list でサーバー名を取得し、各サーバーのツール定義を収集
+    let available_tools = collect_mcp_tools(&mcp_provider).await;
+    info!("MCP tools loaded: {} tools total", available_tools.len());
 
     let state = Arc::new(AppState {
         db,
         lm_client,
         app_config,
         available_tools,
+        mcp_provider,
     });
 
     let app = Router::new()
@@ -86,4 +81,45 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// `uv tool list` で MCP サーバー名を取得し、各サーバーのツール定義を収集する
+async fn collect_mcp_tools(
+    provider: &Arc<dyn McpToolProvider>,
+) -> Vec<nekobox_backend::core::mcp::McpToolDefinition> {
+    // uv tool list を実行してサーバー名一覧を取得
+    let server_names = match tokio::process::Command::new("uv")
+        .args(["tool", "list"])
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            parse_uv_tool_list(&stdout)
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::warn!("uv tool list failed: {stderr}");
+            return vec![];
+        }
+        Err(e) => {
+            tracing::warn!("Failed to run uv tool list: {e}");
+            return vec![];
+        }
+    };
+
+    // 各サーバーからツール定義を取得
+    let mut all_tools = Vec::new();
+    for name in &server_names {
+        match provider.list_tools(name).await {
+            Ok(tools) => {
+                info!("Loaded {} tool(s) from MCP server '{name}'", tools.len());
+                all_tools.extend(tools);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load tools from MCP server '{name}': {e}");
+            }
+        }
+    }
+    all_tools
 }

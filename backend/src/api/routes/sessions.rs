@@ -92,6 +92,7 @@ mod tests {
             lm_client: Arc::new(MockLmStudioClient::new()),
             app_config: make_config(),
             available_tools: vec![],
+            mcp_provider: Arc::new(crate::core::mcp::MockMcpToolProvider::new()),
         });
         let app = Router::new()
             .route("/v1/sessions/{session_id}", get(sessions_handler))

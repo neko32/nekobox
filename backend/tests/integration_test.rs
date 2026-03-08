@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use axum::{http::StatusCode, routing::post, Router};
 use axum_test::TestServer;
+use serde_json::Value;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ use nekobox_backend::{
         config::{AppConfig, CharacterConfig, ModelConfig},
         db::SqliteConversationRepository,
         error::AppError,
+        mcp::{McpToolDefinition, McpToolProvider},
     },
     AppState,
 };
@@ -37,10 +39,13 @@ impl LmStudioClient for SuccessLmClient {
             choices: vec![ChatChoice {
                 message: ChatMessage {
                     role: "assistant".to_string(),
-                    content: format!(
+                    content: Some(format!(
                         r#"{{"message":"{}","emotion":"{}"}}"#,
                         self.message, self.emotion
-                    ),
+                    )),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
                 },
                 finish_reason: Some("stop".to_string()),
             }],
@@ -57,6 +62,27 @@ struct ErrorLmClient(String);
 impl LmStudioClient for ErrorLmClient {
     async fn chat(&self, _req: ChatRequest) -> Result<ChatResponse, AppError> {
         Err(AppError::LmStudio(self.0.clone()))
+    }
+}
+
+// ─── McpToolProvider スタブ ───────────────────────────────────────────────
+
+/// ツールを持たない（呼ばれないはず）McpToolProvider スタブ
+struct NoOpMcpProvider;
+
+#[async_trait]
+impl McpToolProvider for NoOpMcpProvider {
+    async fn list_tools(&self, _server_command: &str) -> Result<Vec<McpToolDefinition>, AppError> {
+        Ok(vec![])
+    }
+
+    async fn call_tool(
+        &self,
+        _server_command: &str,
+        _tool_name: &str,
+        _arguments: Value,
+    ) -> Result<String, AppError> {
+        unreachable!("NoOpMcpProvider.call_tool は呼ばれないはず")
     }
 }
 
@@ -91,6 +117,7 @@ fn make_server(pool: SqlitePool, lm: Arc<dyn LmStudioClient>, config: AppConfig)
         lm_client: lm,
         app_config: config,
         available_tools: vec![],
+        mcp_provider: Arc::new(NoOpMcpProvider),
     });
     let app = Router::new()
         .route("/v1/msg", post(msg_handler))
