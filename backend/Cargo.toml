@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "nekobox-backend"
 path = "src/main.rs"
 
+[[bin]]
+name = "summarize"
+path = "src/bin/summarize.rs"
+
 [dependencies]
 axum              = "0.8"
 tokio             = { version = "1", features = ["full"] }
