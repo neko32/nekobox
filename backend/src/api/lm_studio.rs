@@ -134,3 +134,162 @@ impl LmStudioClient for HttpLmStudioClient {
         Ok(response)
     }
 }
+
+// ───────────────────────────────────── TextCompleter アダプター ────────────
+
+/// `LmStudioClient` を `core::summary::TextCompleter` に適合させるアダプター
+///
+/// system プロンプトと user メッセージを受け取り、LM Studio へ送信して
+/// アシスタントの返答文字列を返す。
+pub struct LmStudioTextCompleter<C: LmStudioClient> {
+    pub client: C,
+    pub model_id: String,
+}
+
+#[async_trait]
+impl<C: LmStudioClient> crate::core::summary::TextCompleter for LmStudioTextCompleter<C> {
+    async fn complete(&self, system: &str, user: &str) -> Result<String, AppError> {
+        let request = ChatRequest {
+            model: self.model_id.clone(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(system.to_string()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(user.to_string()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            ],
+            temperature: 0.3,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let response = self.client.chat(request).await?;
+        Ok(response
+            .choices
+            .into_iter()
+            .next()
+            .and_then(|c| c.message.content)
+            .unwrap_or_default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::summary::TextCompleter;
+
+    #[tokio::test]
+    async fn completer_returns_assistant_content() {
+        let mut mock_client = MockLmStudioClient::new();
+        mock_client.expect_chat().returning(|_| {
+            Ok(ChatResponse {
+                id: "resp-1".to_string(),
+                choices: vec![ChatChoice {
+                    message: ChatMessage {
+                        role: "assistant".to_string(),
+                        content: Some("サマリ結果".to_string()),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                    },
+                    finish_reason: Some("stop".to_string()),
+                }],
+                usage: None,
+                model: None,
+            })
+        });
+
+        let completer = LmStudioTextCompleter {
+            client: mock_client,
+            model_id: String::new(),
+        };
+
+        let result = completer.complete("system", "user").await.unwrap();
+        assert_eq!(result, "サマリ結果");
+    }
+
+    #[tokio::test]
+    async fn completer_returns_empty_string_when_no_choices() {
+        let mut mock_client = MockLmStudioClient::new();
+        mock_client.expect_chat().returning(|_| {
+            Ok(ChatResponse {
+                id: "resp-2".to_string(),
+                choices: vec![],
+                usage: None,
+                model: None,
+            })
+        });
+
+        let completer = LmStudioTextCompleter {
+            client: mock_client,
+            model_id: String::new(),
+        };
+
+        let result = completer.complete("system", "user").await.unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[tokio::test]
+    async fn completer_sends_correct_model_id() {
+        let mut mock_client = MockLmStudioClient::new();
+        mock_client
+            .expect_chat()
+            .withf(|req| req.model == "test-model-123")
+            .returning(|_| {
+                Ok(ChatResponse {
+                    id: "resp-3".to_string(),
+                    choices: vec![],
+                    usage: None,
+                    model: None,
+                })
+            });
+
+        let completer = LmStudioTextCompleter {
+            client: mock_client,
+            model_id: "test-model-123".to_string(),
+        };
+
+        completer.complete("sys", "usr").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn completer_sends_system_and_user_messages() {
+        let mut mock_client = MockLmStudioClient::new();
+        mock_client
+            .expect_chat()
+            .withf(|req| {
+                req.messages.len() == 2
+                    && req.messages[0].role == "system"
+                    && req.messages[0].content.as_deref() == Some("システムプロンプト")
+                    && req.messages[1].role == "user"
+                    && req.messages[1].content.as_deref() == Some("会話テキスト")
+            })
+            .returning(|_| {
+                Ok(ChatResponse {
+                    id: "resp-4".to_string(),
+                    choices: vec![],
+                    usage: None,
+                    model: None,
+                })
+            });
+
+        let completer = LmStudioTextCompleter {
+            client: mock_client,
+            model_id: String::new(),
+        };
+
+        completer
+            .complete("システムプロンプト", "会話テキスト")
+            .await
+            .unwrap();
+    }
+}

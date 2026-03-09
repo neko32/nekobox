@@ -7,68 +7,19 @@
 ///   NEKOBOX_DB_PATH        SQLite ファイルのあるディレクトリ
 ///   NEKOBOX_LMSTUDIO_HOST  LM Studio ホスト名
 ///   NEKOBOX_LMSTUDIO_PORT  LM Studio ポート番号
-///   NEKOBOX_MODEL_ID       使用するモデル ID
-///   NEKOEXPERT_PATH        expert_summary_ja_v1.0.0.md があるディレクトリ
+///   NEKOEXPERT_PATH        expert_summary_gen_ja_v1.0.0.md があるディレクトリ
+///
+/// オプション環境変数:
+///   NEKOBOX_MODEL_ID       使用するモデル ID（未指定時は LM Studio ロード中のモデルを使用）
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use nekobox_backend::{
-    api::lm_studio::{ChatMessage, ChatRequest, HttpLmStudioClient, LmStudioClient},
-    core::{
-        error::AppError,
-        summary::{
-            generate_summaries, SqliteSummaryRepository, SummaryRepository, TextCompleter,
-            TURNS_PER_CHUNK,
-        },
+    api::lm_studio::{HttpLmStudioClient, LmStudioTextCompleter},
+    core::summary::{
+        generate_summaries, SqliteSummaryRepository, SummaryRepository, TURNS_PER_CHUNK,
     },
 };
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-
-// ─────────────────────────────────────── TextCompleter 実装 ────────────────
-
-/// `HttpLmStudioClient` を `TextCompleter` に適合させるアダプター
-struct LmStudioCompleter {
-    client: HttpLmStudioClient,
-    model_id: String,
-}
-
-#[async_trait]
-impl TextCompleter for LmStudioCompleter {
-    async fn complete(&self, system: &str, user: &str) -> Result<String, AppError> {
-        let request = ChatRequest {
-            model: self.model_id.clone(),
-            messages: vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: Some(system.to_string()),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: Some(user.to_string()),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                },
-            ],
-            temperature: 0.3,
-            tools: None,
-            tool_choice: None,
-        };
-
-        let response = self.client.chat(request).await?;
-        Ok(response
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|c| c.message.content)
-            .unwrap_or_default())
-    }
-}
-
-// ─────────────────────────────────────── エントリポイント ──────────────────
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -113,7 +64,7 @@ async fn main() -> Result<()> {
 
     // LM Studio クライアント設定
     let lm_base_url = format!("http://{lm_host}:{lm_port}");
-    let completer = LmStudioCompleter {
+    let completer = LmStudioTextCompleter {
         client: HttpLmStudioClient::new(lm_base_url),
         model_id,
     };
