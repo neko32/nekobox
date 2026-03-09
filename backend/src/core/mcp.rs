@@ -496,6 +496,7 @@ mod tests {
             name: String,
             description: Option<String>,
             #[serde(rename = "inputSchema", default)]
+            #[allow(dead_code)]
             input_schema: Value,
         }
 
