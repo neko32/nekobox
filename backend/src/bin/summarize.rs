@@ -7,6 +7,7 @@
 ///   NEKOBOX_DB_PATH        SQLite ファイルのあるディレクトリ
 ///   NEKOBOX_LMSTUDIO_HOST  LM Studio ホスト名
 ///   NEKOBOX_LMSTUDIO_PORT  LM Studio ポート番号
+///   NEKOBOX_CFG_PATH       app.config があるディレクトリ
 ///   NEKOEXPERT_PATH        expert_summary_gen_ja_v1.0.0.md があるディレクトリ
 ///
 /// オプション環境変数:
@@ -14,8 +15,11 @@
 use anyhow::{Context, Result};
 use nekobox_backend::{
     api::lm_studio::{HttpLmStudioClient, LmStudioTextCompleter},
-    core::summary::{
-        generate_summaries, SqliteSummaryRepository, SummaryRepository, TURNS_PER_CHUNK,
+    core::{
+        config::AppConfig,
+        summary::{
+            generate_summaries, SqliteSummaryRepository, SummaryRepository, TURNS_PER_CHUNK,
+        },
     },
 };
 use tracing::info;
@@ -38,8 +42,15 @@ async fn main() -> Result<()> {
         .context("NEKOBOX_LMSTUDIO_PORT が設定されていません")?;
     // 未指定の場合は空文字列 → LM Studio がロード中のモデルを使用する
     let model_id = std::env::var("NEKOBOX_MODEL_ID").unwrap_or_default();
+    let cfg_path =
+        std::env::var("NEKOBOX_CFG_PATH").context("NEKOBOX_CFG_PATH が設定されていません")?;
     let expert_path =
         std::env::var("NEKOEXPERT_PATH").context("NEKOEXPERT_PATH が設定されていません")?;
+
+    // app.config を読み込む
+    let app_config = AppConfig::load(&cfg_path).context("app.config の読み込みに失敗")?;
+    let summary_gen_temperature = app_config.model.summary_gen.temperature;
+    info!("summary_gen temperature: {summary_gen_temperature}");
 
     // システムプロンプトを読み込む
     let prompt_file = std::path::Path::new(&expert_path).join("expert_summary_gen_ja_v1.0.0.md");
@@ -67,6 +78,7 @@ async fn main() -> Result<()> {
     let completer = LmStudioTextCompleter {
         client: HttpLmStudioClient::new(lm_base_url),
         model_id,
+        temperature: summary_gen_temperature,
     };
 
     info!(

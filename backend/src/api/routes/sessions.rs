@@ -64,7 +64,7 @@ mod tests {
     use crate::{
         api::lm_studio::MockLmStudioClient,
         core::{
-            config::{AppConfig, CharacterConfig, ModelConfig},
+            config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
             db::MockConversationRepository,
             models::{Role, SessionLog},
         },
@@ -82,7 +82,10 @@ mod tests {
                 model_path: None,
                 settings_path: "/tmp".to_string(),
             },
-            model: ModelConfig { temperature: 0.6 },
+            model: ModelConfig {
+                regular_chat: ChatModelConfig { temperature: 0.6 },
+                summary_gen: ChatModelConfig { temperature: 0.1 },
+            },
         }
     }
 

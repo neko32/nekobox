@@ -93,10 +93,12 @@ pub async fn msg_handler(
     let tool_choice = tools.as_ref().map(|_| "auto".to_string());
 
     // ── 最初の LM Studio 呼び出し（エラー時は DB に書き込まない）──
+    let regular_chat_temperature = state.app_config.model.regular_chat.temperature;
+    tracing::info!("msg_handler: regular_chat temperature={regular_chat_temperature}");
     let first_request = ChatRequest {
         model: state.app_config.character.name.clone(),
         messages: messages.clone(),
-        temperature: state.app_config.model.temperature,
+        temperature: regular_chat_temperature,
         tools: tools.clone(),
         tool_choice: tool_choice.clone(),
     };
@@ -212,7 +214,7 @@ pub async fn msg_handler(
             let next_request = ChatRequest {
                 model: state.app_config.character.name.clone(),
                 messages: messages.clone(),
-                temperature: state.app_config.model.temperature,
+                temperature: regular_chat_temperature,
                 tools: tools.clone(),
                 tool_choice: tool_choice.clone(),
             };
@@ -337,7 +339,7 @@ mod tests {
     use crate::{
         api::lm_studio::{ChatChoice, ChatResponse, MockLmStudioClient},
         core::{
-            config::{AppConfig, CharacterConfig, ModelConfig},
+            config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
             db::MockConversationRepository,
             mcp::MockMcpToolProvider,
         },
@@ -363,7 +365,10 @@ mod tests {
                 model_path: None,
                 settings_path: tmp.path().to_string_lossy().into_owned(),
             },
-            model: ModelConfig { temperature: 0.6 },
+            model: ModelConfig {
+                regular_chat: ChatModelConfig { temperature: 0.6 },
+                summary_gen: ChatModelConfig { temperature: 0.1 },
+            },
         };
         (cfg, tmp) // tmp を返してドロップを防ぐ
     }

@@ -15,7 +15,7 @@ use nekobox_backend::{
         routes::msg::msg_handler,
     },
     core::{
-        config::{AppConfig, CharacterConfig, ModelConfig},
+        config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
         db::SqliteConversationRepository,
         error::AppError,
         mcp::{McpToolDefinition, McpToolProvider},
@@ -107,7 +107,10 @@ fn make_config(settings_dir: &std::path::Path) -> AppConfig {
             model_path: None,
             settings_path: settings_dir.to_string_lossy().into_owned(),
         },
-        model: ModelConfig { temperature: 0.6 },
+        model: ModelConfig {
+            regular_chat: ChatModelConfig { temperature: 0.6 },
+            summary_gen: ChatModelConfig { temperature: 0.1 },
+        },
     }
 }
 

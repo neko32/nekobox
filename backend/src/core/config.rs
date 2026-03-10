@@ -22,8 +22,14 @@ pub struct CharacterConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ModelConfig {
+pub struct ChatModelConfig {
     pub temperature: f32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModelConfig {
+    pub regular_chat: ChatModelConfig,
+    pub summary_gen: ChatModelConfig,
 }
 
 /// JSON文字列中の ${VAR} をシステム環境変数で展開する
@@ -125,7 +131,10 @@ mod tests {
                 model_path: None,
                 settings_path: dir.to_string_lossy().into_owned(),
             },
-            model: ModelConfig { temperature: 0.6 },
+            model: ModelConfig {
+                regular_chat: ChatModelConfig { temperature: 0.6 },
+                summary_gen: ChatModelConfig { temperature: 0.1 },
+            },
         }
     }
 
@@ -158,14 +167,18 @@ mod tests {
                 "model_path": null,
                 "settings_path": "/settings"
             },
-            "model": {"temperature": 0.7}
+            "model": {
+                "regular_chat": {"temperature": 0.7},
+                "summary_gen": {"temperature": 0.1}
+            }
         }"#;
         std::fs::write(tmp.path().join("app.config"), json).unwrap();
 
         let cfg = AppConfig::load(tmp.path().to_str().unwrap()).unwrap();
         assert_eq!(cfg.user_name, "テストユーザー");
         assert_eq!(cfg.character.name, "takochan");
-        assert!((cfg.model.temperature - 0.7).abs() < 0.001);
+        assert!((cfg.model.regular_chat.temperature - 0.7).abs() < 0.001);
+        assert!((cfg.model.summary_gen.temperature - 0.1).abs() < 0.001);
         assert!(cfg.is_first_session());
     }
 

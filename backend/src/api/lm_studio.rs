@@ -144,11 +144,13 @@ impl LmStudioClient for HttpLmStudioClient {
 pub struct LmStudioTextCompleter<C: LmStudioClient> {
     pub client: C,
     pub model_id: String,
+    pub temperature: f32,
 }
 
 #[async_trait]
 impl<C: LmStudioClient> crate::core::summary::TextCompleter for LmStudioTextCompleter<C> {
     async fn complete(&self, system: &str, user: &str) -> Result<String, AppError> {
+        tracing::info!("LmStudioTextCompleter: temperature={}", self.temperature);
         let request = ChatRequest {
             model: self.model_id.clone(),
             messages: vec![
@@ -167,7 +169,7 @@ impl<C: LmStudioClient> crate::core::summary::TextCompleter for LmStudioTextComp
                     name: None,
                 },
             ],
-            temperature: 0.3,
+            temperature: self.temperature,
             tools: None,
             tool_choice: None,
         };
@@ -211,6 +213,7 @@ mod tests {
         let completer = LmStudioTextCompleter {
             client: mock_client,
             model_id: String::new(),
+            temperature: 0.3,
         };
 
         let result = completer.complete("system", "user").await.unwrap();
@@ -232,6 +235,7 @@ mod tests {
         let completer = LmStudioTextCompleter {
             client: mock_client,
             model_id: String::new(),
+            temperature: 0.3,
         };
 
         let result = completer.complete("system", "user").await.unwrap();
@@ -256,6 +260,31 @@ mod tests {
         let completer = LmStudioTextCompleter {
             client: mock_client,
             model_id: "test-model-123".to_string(),
+            temperature: 0.3,
+        };
+
+        completer.complete("sys", "usr").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn completer_sends_configured_temperature() {
+        let mut mock_client = MockLmStudioClient::new();
+        mock_client
+            .expect_chat()
+            .withf(|req| (req.temperature - 0.7_f32).abs() < 0.001)
+            .returning(|_| {
+                Ok(ChatResponse {
+                    id: "resp-5".to_string(),
+                    choices: vec![],
+                    usage: None,
+                    model: None,
+                })
+            });
+
+        let completer = LmStudioTextCompleter {
+            client: mock_client,
+            model_id: String::new(),
+            temperature: 0.7,
         };
 
         completer.complete("sys", "usr").await.unwrap();
@@ -285,6 +314,7 @@ mod tests {
         let completer = LmStudioTextCompleter {
             client: mock_client,
             model_id: String::new(),
+            temperature: 0.3,
         };
 
         completer
