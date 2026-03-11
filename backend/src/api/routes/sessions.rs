@@ -75,7 +75,7 @@ mod tests {
         AppConfig {
             current_session: "ses-001".to_string(),
             user_name: "さのまる".to_string(),
-            background_image: None,
+            background_id: None,
             character: CharacterConfig {
                 name: "takochan".to_string(),
                 version: "1.0.0".to_string(),
@@ -94,6 +94,7 @@ mod tests {
             db: Arc::new(db),
             lm_client: Arc::new(MockLmStudioClient::new()),
             app_config: make_config(),
+            background: None,
             available_tools: vec![],
             mcp_provider: Arc::new(crate::core::mcp::MockMcpToolProvider::new()),
         });
