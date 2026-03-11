@@ -3,12 +3,39 @@ use std::path::Path;
 
 use crate::core::error::AppError;
 
+/// background_config.json の各エントリ
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackgroundEntry {
+    pub id: String,
+    pub name: String,
+    /// 環境変数展開済みの画像パス
+    pub image: String,
+    pub description: String,
+    pub location_type: Vec<String>,
+}
+
+/// background_config.json 全体
+#[derive(Debug, Clone, Deserialize)]
+struct BackgroundConfigFile {
+    background: Vec<BackgroundEntryRaw>,
+}
+
+/// JSON デシリアライズ用（image は展開前の生文字列）
+#[derive(Debug, Clone, Deserialize)]
+struct BackgroundEntryRaw {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub description: String,
+    pub location_type: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub current_session: String,
     pub user_name: String,
-    /// JSONキーは `background_image`（仕様書では `backend_image` と表記ゆれあり）
-    pub background_image: Option<String>,
+    /// background_config.json 内の id を指す
+    pub background_id: Option<String>,
     pub character: CharacterConfig,
     pub model: ModelConfig,
 }
@@ -68,9 +95,33 @@ impl AppConfig {
         // パス系フィールドを展開・正規化
         config.character.settings_path = expand_path(&config.character.settings_path);
         config.character.model_path = config.character.model_path.map(|p| expand_path(&p));
-        config.background_image = config.background_image.map(|p| expand_path(&p));
 
         Ok(config)
+    }
+
+    /// `background_config.json` をロードし、`background_id` に一致する `BackgroundEntry` を返す。
+    /// `background_id` が未設定またはマッチするエントリがなければ `None` を返す。
+    pub fn load_background(&self, cfg_path: &str) -> Result<Option<BackgroundEntry>, AppError> {
+        let id = match &self.background_id {
+            Some(id) => id.clone(),
+            None => return Ok(None),
+        };
+
+        let bg_file = Path::new(cfg_path).join("background_config.json");
+        let raw = std::fs::read_to_string(&bg_file)
+            .map_err(|e| AppError::Config(format!("Cannot read background_config.json: {e}")))?;
+
+        let parsed: BackgroundConfigFile = serde_json::from_str(&raw)
+            .map_err(|e| AppError::Config(format!("Invalid background_config.json: {e}")))?;
+
+        let entry = parsed.background.into_iter().find(|b| b.id == id);
+        Ok(entry.map(|e| BackgroundEntry {
+            id: e.id,
+            name: e.name,
+            image: expand_path(&e.image),
+            description: e.description,
+            location_type: e.location_type,
+        }))
     }
 
     /// 初回セッション（`current_session == "na"`）か
@@ -124,7 +175,7 @@ mod tests {
         AppConfig {
             current_session: "na".to_string(),
             user_name: "テスト".to_string(),
-            background_image: None,
+            background_id: None,
             character: CharacterConfig {
                 name: "takochan".to_string(),
                 version: "1.0.0".to_string(),
@@ -270,5 +321,111 @@ mod tests {
         let mut cfg = make_config_in(tmp.path());
         cfg.current_session = "some-uuid-1234".to_string();
         assert!(!cfg.is_first_session());
+    }
+
+    // ── load_background ──────────────────────────────────────
+
+    fn write_background_config(dir: &std::path::Path) {
+        let json = r#"{
+            "background": [
+                {
+                    "id": "forest_0001",
+                    "name": "森の神秘的な池",
+                    "image": "/images/forest.png",
+                    "description": "透明な池ときれいな木々",
+                    "location_type": ["屋外", "自然"]
+                },
+                {
+                    "id": "city_0001",
+                    "name": "都会の夕暮れ",
+                    "image": "/images/city.png",
+                    "description": "都市の夕暮れ",
+                    "location_type": ["屋外", "都市"]
+                }
+            ]
+        }"#;
+        std::fs::write(dir.join("background_config.json"), json).unwrap();
+    }
+
+    #[test]
+    fn load_background_returns_matched_entry() {
+        let tmp = tempdir().unwrap();
+        write_background_config(tmp.path());
+
+        let mut cfg = make_config_in(tmp.path());
+        cfg.background_id = Some("forest_0001".to_string());
+
+        let bg = cfg.load_background(tmp.path().to_str().unwrap()).unwrap();
+        let bg = bg.unwrap();
+        assert_eq!(bg.id, "forest_0001");
+        assert_eq!(bg.name, "森の神秘的な池");
+        assert!(bg.description.contains("透明な池"));
+        assert_eq!(bg.location_type, vec!["屋外", "自然"]);
+    }
+
+    #[test]
+    fn load_background_returns_none_when_id_not_set() {
+        let tmp = tempdir().unwrap();
+        write_background_config(tmp.path());
+
+        let cfg = make_config_in(tmp.path()); // background_id = None
+        let bg = cfg.load_background(tmp.path().to_str().unwrap()).unwrap();
+        assert!(bg.is_none());
+    }
+
+    #[test]
+    fn load_background_returns_none_when_id_not_found() {
+        let tmp = tempdir().unwrap();
+        write_background_config(tmp.path());
+
+        let mut cfg = make_config_in(tmp.path());
+        cfg.background_id = Some("nonexistent_id".to_string());
+
+        let bg = cfg.load_background(tmp.path().to_str().unwrap()).unwrap();
+        assert!(bg.is_none());
+    }
+
+    #[test]
+    fn load_background_err_when_file_missing() {
+        let tmp = tempdir().unwrap();
+        // background_config.json を書かない
+
+        let mut cfg = make_config_in(tmp.path());
+        cfg.background_id = Some("forest_0001".to_string());
+
+        let err = cfg
+            .load_background(tmp.path().to_str().unwrap())
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Cannot read background_config.json"));
+    }
+
+    #[test]
+    fn load_background_expands_env_var_in_image_path() {
+        let tmp = tempdir().unwrap();
+        std::env::set_var("NEKOBOX_CFG_PATH", tmp.path().to_str().unwrap());
+        let json = r#"{
+            "background": [
+                {
+                    "id": "env_test",
+                    "name": "環境変数テスト",
+                    "image": "${NEKOBOX_CFG_PATH}/images/test.png",
+                    "description": "テスト",
+                    "location_type": []
+                }
+            ]
+        }"#;
+        std::fs::write(tmp.path().join("background_config.json"), json).unwrap();
+
+        let mut cfg = make_config_in(tmp.path());
+        cfg.background_id = Some("env_test".to_string());
+
+        let bg = cfg
+            .load_background(tmp.path().to_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(!bg.image.contains("${NEKOBOX_CFG_PATH}"));
+        assert!(bg.image.contains("images"));
     }
 }

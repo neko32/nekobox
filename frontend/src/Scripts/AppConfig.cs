@@ -24,10 +24,10 @@ public sealed class AppConfig
     public string UserName { get; set; } = string.Empty;
 
     /// <summary>
-    /// 背景画像パス。仕様書サンプルでは "backend_image" と記載ゆれあり → "background_image" を正とする。
+    /// background_config.json 内の背景 ID。
     /// </summary>
-    [JsonPropertyName("background_image")]
-    public string? BackgroundImage { get; set; }
+    [JsonPropertyName("background_id")]
+    public string? BackgroundId { get; set; }
 
     [JsonPropertyName("character")]
     public CharacterConfig Character { get; set; } = new();
@@ -77,9 +77,31 @@ public sealed class AppConfig
         // パス系フィールドの環境変数展開 & OS パスデリミタ正規化
         cfg.Character.SettingsPath = ExpandPath(cfg.Character.SettingsPath)!;
         cfg.Character.ModelPath    = ExpandPath(cfg.Character.ModelPath);
-        cfg.BackgroundImage        = cfg.BackgroundImage is null ? null : ExpandPath(cfg.BackgroundImage);
 
         return cfg;
+    }
+
+    /// <summary>
+    /// background_config.json をロードし、BackgroundId に一致するエントリを返す。
+    /// BackgroundId が未設定またはマッチするエントリがなければ null を返す。
+    /// </summary>
+    public BackgroundEntry? LoadBackground(string cfgPath)
+    {
+        if (string.IsNullOrEmpty(BackgroundId)) return null;
+
+        var file = Path.Combine(cfgPath, "background_config.json");
+        if (!File.Exists(file)) return null;
+
+        var raw    = File.ReadAllText(file);
+        var parsed = JsonSerializer.Deserialize<BackgroundConfigFile>(raw, JsonOptions);
+        if (parsed?.Background is null) return null;
+
+        var entry = parsed.Background.Find(b => b.Id == BackgroundId);
+        if (entry is null) return null;
+
+        // image パス内の環境変数を展開
+        entry.Image = ExpandPath(entry.Image) ?? entry.Image;
+        return entry;
     }
 
     public void Save(string cfgPath)
@@ -125,6 +147,44 @@ public sealed class CharacterConfig
 
 public sealed class ModelConfig
 {
+    [JsonPropertyName("regular_chat")]
+    public ChatModelConfig RegularChat { get; set; } = new();
+
+    [JsonPropertyName("summary_gen")]
+    public ChatModelConfig SummaryGen { get; set; } = new();
+}
+
+public sealed class ChatModelConfig
+{
     [JsonPropertyName("temperature")]
     public float Temperature { get; set; } = 0.6f;
+}
+
+// ──────────────────────────────────────────────────────────────
+//  background_config.json のモデル
+// ──────────────────────────────────────────────────────────────
+
+public sealed class BackgroundEntry
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>環境変数展開済みの画像パス</summary>
+    [JsonPropertyName("image")]
+    public string Image { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("location_type")]
+    public List<string> LocationType { get; set; } = [];
+}
+
+internal sealed class BackgroundConfigFile
+{
+    [JsonPropertyName("background")]
+    public List<BackgroundEntry>? Background { get; set; }
 }

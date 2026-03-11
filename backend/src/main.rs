@@ -39,6 +39,12 @@ async fn main() -> Result<()> {
     // app.config ロード
     let app_config = AppConfig::load(&cfg_path)?;
 
+    // background_config.json ロード
+    let background = app_config.load_background(&cfg_path)?;
+    if let Some(ref bg) = background {
+        info!("Background loaded: id={}, name={}", bg.id, bg.name);
+    }
+
     // SQLite 接続 & マイグレーション
     let db_url = format!("sqlite:{db_path}/nekobox.sqlite3?mode=rwc");
     let pool = sqlx::SqlitePool::connect(&db_url).await?;
@@ -60,6 +66,7 @@ async fn main() -> Result<()> {
         db,
         lm_client,
         app_config,
+        background,
         available_tools,
         mcp_provider,
     });

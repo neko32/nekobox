@@ -100,7 +100,7 @@ fn make_config(settings_dir: &std::path::Path) -> AppConfig {
     AppConfig {
         current_session: "ses-it-001".to_string(),
         user_name: "さのまる".to_string(),
-        background_image: Some("/bg.png".to_string()),
+        background_id: Some("forest_0001".to_string()),
         character: CharacterConfig {
             name: "takochan".to_string(),
             version: "1.0.0".to_string(),
@@ -119,6 +119,7 @@ fn make_server(pool: SqlitePool, lm: Arc<dyn LmStudioClient>, config: AppConfig)
         db: Arc::new(SqliteConversationRepository::new(pool)),
         lm_client: lm,
         app_config: config,
+        background: None,
         available_tools: vec![],
         mcp_provider: Arc::new(NoOpMcpProvider),
     });

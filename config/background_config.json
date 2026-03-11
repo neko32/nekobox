@@ -1,0 +1,12 @@
+{
+  "background":[
+    {
+      "id": "forest_0001",
+      "name": "森の神秘的な池",
+      "image": "C:\\resources\\nekobox\\images\\default.png",
+      "description": "透明な池ときれいな木々に囲まれて神秘的な森",
+      "location_type": ["屋外", "自然", "パワースポット"]
+    }
+  ]
+}
+

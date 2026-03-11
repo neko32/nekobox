@@ -29,6 +29,7 @@ public partial class Main : Node
     private string?              _lastResponseId;
     private GDCubismUserModelCS? _cubismModel;
     private Dictionary<string, EmotionEntry>? _emotionMap;
+    private BackgroundEntry?     _background;
 
     // emotion_model_map.json の 1 エントリ
     private sealed record EmotionEntry(
@@ -164,25 +165,33 @@ public partial class Main : Node
 
     private void LoadBackground()
     {
-        if (string.IsNullOrEmpty(_config.BackgroundImage) ||
-            !System.IO.File.Exists(_config.BackgroundImage))
+        _background = _config.LoadBackground(_cfgPath);
+        if (_background is null)
         {
-            GD.PrintErr($"背景画像が見つかりません: {_config.BackgroundImage}");
+            GD.PrintErr($"背景設定が見つかりません: background_id={_config.BackgroundId}");
+            return;
+        }
+
+        var imagePath = _background.Image;
+        if (string.IsNullOrEmpty(imagePath) || !System.IO.File.Exists(imagePath))
+        {
+            GD.PrintErr($"背景画像が見つかりません: {imagePath}");
             return;
         }
 
         // Godot VFS は絶対 OS パスが不安定なため、.NET で読み込んでバッファ渡し
         // 拡張子ではなく magic bytes でフォーマットを判定（拡張子と中身が一致しない場合を考慮）
-        var bytes = System.IO.File.ReadAllBytes(_config.BackgroundImage);
+        var bytes = System.IO.File.ReadAllBytes(imagePath);
         var img   = new Image();
         var err   = DetectAndLoadImage(img, bytes);
 
         if (err != Error.Ok)
         {
-            GD.PrintErr($"背景画像のロードに失敗しました: {_config.BackgroundImage} ({err})");
+            GD.PrintErr($"背景画像のロードに失敗しました: {imagePath} ({err})");
             return;
         }
 
+        GD.Print($"背景ロード完了: {_background.Name} ({imagePath})");
         // TextureRect が stretch_mode=0 (SCALE) で自動的にウィンドウサイズに合わせる
         _backgroundRect.Texture = ImageTexture.CreateFromImage(img);
     }

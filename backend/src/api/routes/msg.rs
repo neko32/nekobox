@@ -68,7 +68,16 @@ pub async fn msg_handler(
     }
 
     // system_prompt をキャラクター設定ファイルからロード
-    let system_prompt = state.app_config.load_system_prompt()?;
+    let mut system_prompt = state.app_config.load_system_prompt()?;
+
+    // 背景情報をシステムプロンプトに追記
+    if let Some(ref bg) = state.background {
+        let tags = bg.location_type.join(", ");
+        system_prompt.push_str(&format!(
+            "\n\n# 追加情報: 背景とその設定\n名前: {}\n説明: {}\n場所のタグ: {{{}}}",
+            bg.name, bg.description, tags
+        ));
+    }
 
     // LM Studio へ送る初期メッセージを構築
     let mut messages = vec![
@@ -107,9 +116,9 @@ pub async fn msg_handler(
     // 最初の LM 呼び出し成功後にターン番号を算出し、ユーザーメッセージを保存
     let settings_name = format!("{}_{}", req.character_name, req.version);
     let bg = state
-        .app_config
-        .background_image
-        .clone()
+        .background
+        .as_ref()
+        .map(|b| b.image.clone())
         .unwrap_or_default();
     let turn_number = state.db.get_current_turn(&req.session_id).await? + 1;
 
@@ -358,7 +367,7 @@ mod tests {
         let cfg = AppConfig {
             current_session: "ses-001".to_string(),
             user_name: "さのまる".to_string(),
-            background_image: Some("/bg.png".to_string()),
+            background_id: Some("forest_0001".to_string()),
             character: CharacterConfig {
                 name: "takochan".to_string(),
                 version: "1.0.0".to_string(),
@@ -400,6 +409,7 @@ mod tests {
             db: Arc::new(db),
             lm_client: Arc::new(lm),
             app_config: config,
+            background: None,
             available_tools: vec![],
             mcp_provider: Arc::new(MockMcpToolProvider::new()),
         });
@@ -705,6 +715,7 @@ mod tests {
             db: Arc::new(db),
             lm_client: Arc::new(lm),
             app_config: cfg,
+            background: None,
             available_tools: vec![tool_def],
             mcp_provider: Arc::new(mcp),
         });
@@ -722,5 +733,62 @@ mod tests {
         let json = res.json::<serde_json::Value>();
         assert_eq!(json["message"], "東京は晴れです！");
         assert_eq!(json["emotion"], "嬉しい");
+    }
+
+    /// 背景が設定されているとき、system プロンプトに背景情報が追記されることを確認
+    #[tokio::test]
+    async fn msg_handler_appends_background_info_to_system_prompt() {
+        use crate::core::config::BackgroundEntry;
+
+        let mut lm = MockLmStudioClient::new();
+        lm.expect_chat().once().returning(|req| {
+            // system メッセージに背景情報が含まれていることを検証
+            let system_content = req
+                .messages
+                .iter()
+                .find(|m| m.role == "system")
+                .and_then(|m| m.content.as_deref())
+                .unwrap_or("");
+            assert!(
+                system_content.contains("# 追加情報: 背景とその設定"),
+                "system には背景情報が含まれるべき: {system_content}"
+            );
+            assert!(system_content.contains("森の神秘的な池"));
+            assert!(system_content.contains("透明な池"));
+            assert!(system_content.contains("屋外"));
+            Ok(lm_response("背景を見ているよ！", "嬉しい"))
+        });
+
+        let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
+        db.expect_save_log().times(2).returning(|_| Ok(()));
+
+        let (cfg, _tmp) = make_config();
+        let bg = BackgroundEntry {
+            id: "forest_0001".to_string(),
+            name: "森の神秘的な池".to_string(),
+            image: "/images/forest.png".to_string(),
+            description: "透明な池ときれいな木々".to_string(),
+            location_type: vec!["屋外".to_string(), "自然".to_string()],
+        };
+
+        let state = Arc::new(AppState {
+            db: Arc::new(db),
+            lm_client: Arc::new(lm),
+            app_config: cfg,
+            background: Some(bg),
+            available_tools: vec![],
+            mcp_provider: Arc::new(MockMcpToolProvider::new()),
+        });
+        let app = Router::new()
+            .route("/v1/msg", post(msg_handler))
+            .with_state(state);
+        let server = TestServer::new(app);
+
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
     }
 }
