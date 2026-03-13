@@ -18,6 +18,7 @@ use nekobox_backend::{
         config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
         db::SqliteConversationRepository,
         error::AppError,
+        history::MessageHistory,
         mcp::{McpToolDefinition, McpToolProvider},
     },
     AppState,
@@ -115,6 +116,7 @@ fn make_config(settings_dir: &std::path::Path) -> AppConfig {
 }
 
 fn make_server(pool: SqlitePool, lm: Arc<dyn LmStudioClient>, config: AppConfig) -> TestServer {
+    let session_id = config.current_session.clone();
     let state = Arc::new(AppState {
         db: Arc::new(SqliteConversationRepository::new(pool)),
         lm_client: lm,
@@ -122,6 +124,7 @@ fn make_server(pool: SqlitePool, lm: Arc<dyn LmStudioClient>, config: AppConfig)
         background: None,
         available_tools: vec![],
         mcp_provider: Arc::new(NoOpMcpProvider),
+        message_history: Arc::new(tokio::sync::Mutex::new(MessageHistory::new(25, session_id))),
     });
     let app = Router::new()
         .route("/v1/msg", post(msg_handler))
