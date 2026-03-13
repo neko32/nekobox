@@ -13,6 +13,11 @@ use crate::{
     AppState,
 };
 
+/// 短期記憶の最大ターン数
+const MAX_HISTORY_TURNS: usize = 25;
+/// DB クエリ用の最大ターン数（i64）
+const MAX_HISTORY_TURNS_I64: i64 = MAX_HISTORY_TURNS as i64;
+
 /// ツール呼び出しの最大ループ回数（無限ループ防止）
 const MAX_TOOL_ITERATIONS: usize = 5;
 
@@ -79,23 +84,44 @@ pub async fn msg_handler(
         ));
     }
 
-    // LM Studio へ送る初期メッセージを構築
-    let mut messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: Some(system_prompt),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: Some(req.message.clone()),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        },
-    ];
+    // ── 短期記憶バッファの取得・セッション切り替え検出 ──────────────────────
+    let mut history = state.message_history.lock().await;
+    if history.session_id() != req.session_id {
+        // /new コマンド等によるセッション切り替え → DB から新セッションの履歴を復元
+        tracing::info!(
+            "Session changed: {} → {}. Reloading history.",
+            history.session_id(),
+            req.session_id
+        );
+        let recent_logs = state
+            .db
+            .get_recent_turns(&req.session_id, MAX_HISTORY_TURNS_I64)
+            .await?;
+        let turns = build_history_turns_from_logs(recent_logs);
+        history.reset(req.session_id.clone(), turns);
+    }
+
+    // LM Studio へ送るメッセージを構築: system + 過去の履歴 + 今回の user メッセージ
+    let current_user_msg = ChatMessage {
+        role: "user".to_string(),
+        content: Some(req.message.clone()),
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    };
+    let mut messages = Vec::with_capacity(2 + history.to_messages().len() + 1);
+    messages.push(ChatMessage {
+        role: "system".to_string(),
+        content: Some(system_prompt),
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    });
+    messages.extend(history.to_messages());
+    messages.push(current_user_msg.clone());
+
+    // ロックを解放してI/Oを進める（DB保存・LM呼び出し中はロック不要）
+    drop(history);
 
     // 利用可能なツールを OpenAI function calling 形式に変換
     let tools = build_tool_specs(&state.available_tools);
@@ -268,6 +294,28 @@ pub async fn msg_handler(
         })
         .await?;
 
+    // ── 短期記憶バッファに今回のターンを追加 ────────────────────────────────
+    // turn_msgs: [user, (tool...,) assistant] の順で 1ターン分をまとめて push
+    {
+        let mut history = state.message_history.lock().await;
+        // ツールループ中のメッセージを収集する（tool_calls 付きアシスタント＋ツール結果）
+        // messages は [system, ...history, user, (tool_calls_assistant, tool_result)*] の構造
+        // system と history 部分を除いた残りが今ターン分
+        let history_len = history.to_messages().len();
+        // システムメッセージ(1) + 過去履歴 を除いた今ターン分
+        let this_turn_start = 1 + history_len;
+        let mut turn_msgs: Vec<ChatMessage> = messages[this_turn_start..].to_vec();
+        // 最終 assistant レスポンスを追加
+        turn_msgs.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: Some(character_message.clone()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        });
+        history.push_turn(turn_msgs);
+    }
+
     Ok(Json(MsgResponse {
         character_name: req.character_name,
         version: req.version,
@@ -281,6 +329,27 @@ pub async fn msg_handler(
 }
 
 // ───────────────────────────────────── ヘルパー ────────────────────────────
+
+/// `SessionLog` のリストをターン単位の `Vec<Vec<ChatMessage>>` に変換する。
+///
+/// `turn_number` でグルーピングし、各グループ内を挿入順で `ChatMessage` に変換する。
+fn build_history_turns_from_logs(
+    logs: Vec<crate::core::models::SessionLog>,
+) -> Vec<Vec<ChatMessage>> {
+    let mut map: std::collections::BTreeMap<i64, Vec<ChatMessage>> =
+        std::collections::BTreeMap::new();
+    for log in logs {
+        let msg = ChatMessage {
+            role: log.role.as_str().to_string(),
+            content: Some(log.msg),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        };
+        map.entry(log.turn_number).or_default().push(msg);
+    }
+    map.into_values().collect()
+}
 
 /// 利用可能なツール定義を LM Studio 用の ToolSpec リストに変換する
 fn build_tool_specs(tools: &[McpToolDefinition]) -> Option<Vec<ToolSpec>> {
@@ -350,6 +419,7 @@ mod tests {
         core::{
             config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
             db::MockConversationRepository,
+            history::MessageHistory,
             mcp::MockMcpToolProvider,
         },
         AppState,
@@ -400,11 +470,18 @@ mod tests {
         }
     }
 
+    fn make_history(
+        session_id: &str,
+    ) -> Arc<tokio::sync::Mutex<MessageHistory<crate::api::lm_studio::ChatMessage>>> {
+        Arc::new(tokio::sync::Mutex::new(MessageHistory::new(25, session_id)))
+    }
+
     fn make_server(
         lm: MockLmStudioClient,
         db: MockConversationRepository,
         config: AppConfig,
     ) -> TestServer {
+        let session_id = config.current_session.clone();
         let state = Arc::new(AppState {
             db: Arc::new(db),
             lm_client: Arc::new(lm),
@@ -412,6 +489,7 @@ mod tests {
             background: None,
             available_tools: vec![],
             mcp_provider: Arc::new(MockMcpToolProvider::new()),
+            message_history: make_history(&session_id),
         });
         let app = Router::new()
             .route("/v1/msg", post(msg_handler))
@@ -718,6 +796,7 @@ mod tests {
             background: None,
             available_tools: vec![tool_def],
             mcp_provider: Arc::new(mcp),
+            message_history: make_history("ses-001"),
         });
 
         let _ = tool_call_response; // suppress unused warning
@@ -733,6 +812,193 @@ mod tests {
         let json = res.json::<serde_json::Value>();
         assert_eq!(json["message"], "東京は晴れです！");
         assert_eq!(json["emotion"], "嬉しい");
+    }
+
+    /// 履歴があるとき、LM Studio へのリクエストに過去の会話が含まれることを確認
+    #[tokio::test]
+    async fn msg_handler_includes_history_in_request() {
+        let mut lm = MockLmStudioClient::new();
+        lm.expect_chat()
+            .once()
+            .withf(|req| {
+                // system(1) + history(2: user+assistant) + current_user(1) = 4
+                req.messages.len() == 4
+                    && req.messages[1].role == "user"
+                    && req.messages[1].content.as_deref() == Some("前回のユーザーメッセージ")
+                    && req.messages[2].role == "assistant"
+                    && req.messages[3].role == "user"
+                    && req.messages[3].content.as_deref() == Some("こんにちは")
+            })
+            .returning(|_| Ok(lm_response("返答です！", "嬉しい")));
+
+        let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(1));
+        db.expect_save_log().times(2).returning(|_| Ok(()));
+
+        let (cfg, _tmp) = make_config();
+        let session_id = cfg.current_session.clone();
+
+        // 履歴に1ターン分（user + assistant）を事前投入
+        let history = {
+            let mut h = MessageHistory::new(25, &session_id);
+            h.push_turn(vec![
+                crate::api::lm_studio::ChatMessage {
+                    role: "user".to_string(),
+                    content: Some("前回のユーザーメッセージ".to_string()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+                crate::api::lm_studio::ChatMessage {
+                    role: "assistant".to_string(),
+                    content: Some("前回のアシスタント返答".to_string()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            ]);
+            Arc::new(tokio::sync::Mutex::new(h))
+        };
+
+        let state = Arc::new(AppState {
+            db: Arc::new(db),
+            lm_client: Arc::new(lm),
+            app_config: cfg,
+            background: None,
+            available_tools: vec![],
+            mcp_provider: Arc::new(MockMcpToolProvider::new()),
+            message_history: history,
+        });
+        let app = Router::new()
+            .route("/v1/msg", post(msg_handler))
+            .with_state(state);
+        let server = TestServer::new(app);
+
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
+    }
+
+    /// レスポンス成功後、履歴に今回のターンが追加されることを確認
+    #[tokio::test]
+    async fn msg_handler_updates_history_after_response() {
+        let mut lm = MockLmStudioClient::new();
+        lm.expect_chat()
+            .once()
+            .returning(|_| Ok(lm_response("返答です！", "嬉しい")));
+
+        let mut db = MockConversationRepository::new();
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
+        db.expect_save_log().times(2).returning(|_| Ok(()));
+
+        let (cfg, _tmp) = make_config();
+        let session_id = cfg.current_session.clone();
+        let history = Arc::new(tokio::sync::Mutex::new(MessageHistory::new(
+            25,
+            &session_id,
+        )));
+        let history_clone = Arc::clone(&history);
+
+        let state = Arc::new(AppState {
+            db: Arc::new(db),
+            lm_client: Arc::new(lm),
+            app_config: cfg,
+            background: None,
+            available_tools: vec![],
+            mcp_provider: Arc::new(MockMcpToolProvider::new()),
+            message_history: history,
+        });
+        let app = Router::new()
+            .route("/v1/msg", post(msg_handler))
+            .with_state(state);
+        let server = TestServer::new(app);
+
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
+
+        // リクエスト後、履歴に1ターン分追加されているはず
+        let h = history_clone.lock().await;
+        assert_eq!(h.len(), 1, "履歴に1ターン追加されているべき");
+        let msgs = h.to_messages();
+        assert_eq!(msgs[0].role, "user");
+        assert_eq!(msgs[0].content.as_deref(), Some("こんにちは"));
+        assert_eq!(msgs[1].role, "assistant");
+        assert_eq!(msgs[1].content.as_deref(), Some("返答です！"));
+    }
+
+    /// セッションIDが変わったとき、履歴がフラッシュされ新セッションで再ロードされることを確認
+    #[tokio::test]
+    async fn msg_handler_flushes_history_on_session_change() {
+        let mut lm = MockLmStudioClient::new();
+        lm.expect_chat()
+            .once()
+            .withf(|req| {
+                // 新セッション → 履歴なし → system(1) + user(1) = 2
+                req.messages.len() == 2
+                    && req.messages[0].role == "system"
+                    && req.messages[1].role == "user"
+            })
+            .returning(|_| Ok(lm_response("新セッションの返答！", "普通")));
+
+        let mut db = MockConversationRepository::new();
+        // セッション切り替え時に get_recent_turns が呼ばれる（新セッションは空）
+        db.expect_get_recent_turns()
+            .once()
+            .returning(|_, _| Ok(vec![]));
+        db.expect_get_current_turn().once().returning(|_| Ok(0));
+        db.expect_save_log().times(2).returning(|_| Ok(()));
+
+        let (cfg, _tmp) = make_config();
+
+        // 履歴は old-session に紐づいている（今回のリクエストは ses-001）
+        let history = Arc::new(tokio::sync::Mutex::new(MessageHistory::new(
+            25,
+            "old-session-id", // ← リクエストの ses-001 と異なる
+        )));
+        let history_clone = Arc::clone(&history);
+
+        // 古い履歴を1ターン投入
+        {
+            let mut h = history.lock().await;
+            h.push_turn(vec![crate::api::lm_studio::ChatMessage {
+                role: "user".to_string(),
+                content: Some("古いセッションのメッセージ".to_string()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            }]);
+        }
+
+        let state = Arc::new(AppState {
+            db: Arc::new(db),
+            lm_client: Arc::new(lm),
+            app_config: cfg,
+            background: None,
+            available_tools: vec![],
+            mcp_provider: Arc::new(MockMcpToolProvider::new()),
+            message_history: history,
+        });
+        let app = Router::new()
+            .route("/v1/msg", post(msg_handler))
+            .with_state(state);
+        let server = TestServer::new(app);
+
+        // valid_body() は session_id = "ses-001"
+        server
+            .post("/v1/msg")
+            .json(&valid_body())
+            .await
+            .assert_status(StatusCode::OK);
+
+        // 履歴は ses-001 に切り替わり、今回のターンが1件入っている
+        let h = history_clone.lock().await;
+        assert_eq!(h.session_id(), "ses-001");
+        assert_eq!(h.len(), 1);
     }
 
     /// 背景が設定されているとき、system プロンプトに背景情報が追記されることを確認
@@ -779,6 +1045,7 @@ mod tests {
             background: Some(bg),
             available_tools: vec![],
             mcp_provider: Arc::new(MockMcpToolProvider::new()),
+            message_history: make_history("ses-001"),
         });
         let app = Router::new()
             .route("/v1/msg", post(msg_handler))

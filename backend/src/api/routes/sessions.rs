@@ -66,6 +66,7 @@ mod tests {
         core::{
             config::{AppConfig, CharacterConfig, ChatModelConfig, ModelConfig},
             db::MockConversationRepository,
+            history::MessageHistory,
             models::{Role, SessionLog},
         },
         AppState,
@@ -90,13 +91,16 @@ mod tests {
     }
 
     fn make_server(db: MockConversationRepository) -> TestServer {
+        let cfg = make_config();
+        let session_id = cfg.current_session.clone();
         let state = Arc::new(AppState {
             db: Arc::new(db),
             lm_client: Arc::new(MockLmStudioClient::new()),
-            app_config: make_config(),
+            app_config: cfg,
             background: None,
             available_tools: vec![],
             mcp_provider: Arc::new(crate::core::mcp::MockMcpToolProvider::new()),
+            message_history: Arc::new(tokio::sync::Mutex::new(MessageHistory::new(25, session_id))),
         });
         let app = Router::new()
             .route("/v1/sessions/{session_id}", get(sessions_handler))

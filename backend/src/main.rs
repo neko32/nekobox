@@ -9,12 +9,13 @@ use tracing_subscriber::EnvFilter;
 
 use nekobox_backend::{
     api::{
-        lm_studio::{HttpLmStudioClient, LmStudioClient},
+        lm_studio::{ChatMessage, HttpLmStudioClient, LmStudioClient},
         routes,
     },
     core::{
         config::AppConfig,
         db::{ConversationRepository, SqliteConversationRepository},
+        history::MessageHistory,
         mcp::{parse_uv_tool_list, McpToolProvider, UvMcpToolProvider},
     },
     AppState,
@@ -62,6 +63,23 @@ async fn main() -> Result<()> {
     let available_tools = collect_mcp_tools(&mcp_provider).await;
     info!("MCP tools loaded: {} tools total", available_tools.len());
 
+    // 短期記憶バッファを起動時に DB から復元
+    let message_history = {
+        let current_session = &app_config.current_session;
+        let recent_logs = db.get_recent_turns(current_session, 25).await?;
+        let turns = build_history_turns(recent_logs);
+        let mut history = MessageHistory::new(25, current_session.clone());
+        for turn in turns {
+            history.push_turn(turn);
+        }
+        info!(
+            "Message history loaded: {} turn(s) for session={}",
+            history.len(),
+            current_session
+        );
+        Arc::new(tokio::sync::Mutex::new(history))
+    };
+
     let state = Arc::new(AppState {
         db,
         lm_client,
@@ -69,6 +87,7 @@ async fn main() -> Result<()> {
         background,
         available_tools,
         mcp_provider,
+        message_history,
     });
 
     let app = Router::new()
@@ -88,6 +107,32 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// `SessionLog` のリストをターン単位の `Vec<Vec<ChatMessage>>` に変換する。
+///
+/// `turn_number` でグルーピングし、各グループ内を timestamp ASC 順で
+/// `ChatMessage` に変換して返す。グループは `turn_number` ASC 順。
+fn build_history_turns(
+    logs: Vec<nekobox_backend::core::models::SessionLog>,
+) -> Vec<Vec<ChatMessage>> {
+    // turn_number → Vec<ChatMessage> のマップ（挿入順を保つため BTreeMap を使用）
+    let mut map: std::collections::BTreeMap<i64, Vec<ChatMessage>> =
+        std::collections::BTreeMap::new();
+
+    for log in logs {
+        // tool ロールは tool_call_id が不明なため content のみ保持する
+        let msg = ChatMessage {
+            role: log.role.as_str().to_string(),
+            content: Some(log.msg),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        };
+        map.entry(log.turn_number).or_default().push(msg);
+    }
+
+    map.into_values().collect()
 }
 
 /// `uv tool list` で MCP サーバー名を取得し、各サーバーのツール定義を収集する
