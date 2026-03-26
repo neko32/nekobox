@@ -1,7 +1,8 @@
 ﻿# nekobox バックエンドサーバ起動スクリプト (ローカル開発用)
 
 param(
-    [switch]$UseLocalEnvvar
+    [switch]$UseLocalEnvvar,
+    [string]$LogLevel = ""
 )
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -20,12 +21,19 @@ if ($UseLocalEnvvar) {
     Write-Host "[nekobox] OS/シェルの環境変数を使用しますまる" -ForegroundColor Yellow
 }
 
+# -LogLevel 指定時は RUST_LOG を上書き
+if ($LogLevel -ne "") {
+    $env:RUST_LOG = $LogLevel
+    Write-Host "[nekobox] RUST_LOG を '$LogLevel' に設定しますまる" -ForegroundColor Magenta
+}
+
 Write-Host "[nekobox] バックエンドサーバを起動しますまる..." -ForegroundColor Cyan
 Write-Host "  DB Path     : $env:NEKOBOX_DB_PATH"
 Write-Host "  LM Studio   : $env:NEKOBOX_LMSTUDIO_HOST`:$env:NEKOBOX_LMSTUDIO_PORT"
 Write-Host "  Config Path : $env:NEKOBOX_CFG_PATH"
 Write-Host "  Bind        : $env:NEKOBOX_BIND_HOST`:8080"
+Write-Host "  RUST_LOG    : $env:RUST_LOG"
 Write-Host ""
 
 Set-Location "$ProjectRoot\backend"
-cargo run
+cargo run --bin nekobox-backend
