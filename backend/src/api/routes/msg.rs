@@ -84,6 +84,8 @@ pub async fn msg_handler(
         ));
     }
 
+    tracing::debug!("system_prompt assembled:\n{system_prompt}");
+
     // ── 短期記憶バッファの取得・セッション切り替え検出 ──────────────────────
     let mut history = state.message_history.lock().await;
     if history.session_id() != req.session_id {
@@ -269,6 +271,7 @@ pub async fn msg_handler(
 
     // LM Studio レスポンスから message と emotion を抽出
     let raw_content = final_content.unwrap_or_default();
+    tracing::debug!("LM raw response: {raw_content}");
     let (character_message, emotion) = parse_lm_response(&raw_content);
 
     // キャラクターのレスポンスをDBに保存（同じターン番号）
@@ -392,18 +395,25 @@ fn parse_lm_response(content: &str) -> (String, Emotion) {
         return (parsed.message, emotion);
     }
     // JSON パース失敗時はそのままのテキストを返す
+    tracing::warn!(
+        "LM response is not valid JSON, falling back to raw text.\n  raw   : {content:?}\n  stripped: {stripped:?}"
+    );
     (content.to_string(), Emotion::default())
 }
 
-/// ` ```json ... ``` ` または ` ``` ... ``` ` のコードブロックを除去して内側のテキストを返す
+/// ` ```json ... ``` ` または ` ``` ... ``` ` のコードブロックを文字列内から探して内側のテキストを返す。
+/// LLM が前置きテキストの後にコードブロックを置くケースにも対応する。
 fn strip_code_block(s: &str) -> &str {
-    let s = s.trim();
-    let inner = s
-        .strip_prefix("```json")
-        .or_else(|| s.strip_prefix("```"))
-        .and_then(|rest| rest.strip_suffix("```"))
-        .map(str::trim);
-    inner.unwrap_or(s)
+    // ```json を優先して検索し、見つかれば次の ``` までを返す
+    for prefix in &["```json", "```"] {
+        if let Some(start) = s.find(prefix) {
+            let after_prefix = &s[start + prefix.len()..];
+            if let Some(end) = after_prefix.find("```") {
+                return after_prefix[..end].trim();
+            }
+        }
+    }
+    s.trim()
 }
 
 #[cfg(test)]
@@ -511,6 +521,15 @@ mod tests {
     fn parse_lm_response_strips_json_code_block() {
         let wrapped = "```json\n{\"message\":\"にゃ！\",\"emotion\":\"楽しい\"}\n```";
         let (msg, emotion) = parse_lm_response(wrapped);
+        assert_eq!(msg, "にゃ！");
+        assert_eq!(emotion.as_str(), "楽しい");
+    }
+
+    #[test]
+    fn parse_lm_response_strips_code_block_with_preamble() {
+        let with_preamble =
+            "わーい！楽しいにゃ～！\n```json\n{\"message\":\"にゃ！\",\"emotion\":\"楽しい\"}\n```";
+        let (msg, emotion) = parse_lm_response(with_preamble);
         assert_eq!(msg, "にゃ！");
         assert_eq!(emotion.as_str(), "楽しい");
     }
