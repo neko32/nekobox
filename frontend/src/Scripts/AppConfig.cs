@@ -184,6 +184,13 @@ public sealed class TtsConfig
     /// <summary>読み上げる最大文字数（デフォルト: 500）</summary>
     [JsonPropertyName("max_chars")]
     public int MaxChars { get; set; } = 500;
+
+    /// <summary>
+    /// 使用する音声名（部分一致）。null または空文字の場合は日本語音声の先頭を自動選択。
+    /// /tts voices コマンドで利用可能な音声一覧を確認できる。
+    /// </summary>
+    [JsonPropertyName("voice")]
+    public string? Voice { get; set; }
 }
 
 // ──────────────────────────────────────────────────────────────

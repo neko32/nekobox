@@ -515,6 +515,21 @@ public partial class Main : Node
                 GD.Print("[TTS] enabled → false");
                 break;
 
+            case "voices":
+            {
+                var voices  = _tts.GetAvailableVoices();
+                var current = _tts.CurrentVoiceId ?? "(なし)";
+                var lines   = new System.Text.StringBuilder();
+                lines.AppendLine($"利用可能な音声: {voices.Length} 件  (現在: {current})");
+                lines.AppendLine();
+                for (int i = 0; i < voices.Length; i++)
+                    lines.AppendLine($"  [{i}] {voices[i]}");
+                var msg = lines.ToString().TrimEnd();
+                _chatWindow.AddError("TTS VOICES", msg);
+                GD.Print($"[TTS] voices:\n{msg}");
+                break;
+            }
+
             default:
                 // 引数をそのままテスト発話
                 var testText = args.Length > 0 ? args : "テスト発話まる！";

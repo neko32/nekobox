@@ -20,6 +20,12 @@ public interface ITtsService
 
     /// <summary>実行時に TTS の有効/無効を切り替える。</summary>
     void SetEnabled(bool enabled);
+
+    /// <summary>現在使用中の音声 ID を返す。</summary>
+    string? CurrentVoiceId { get; }
+
+    /// <summary>システムで利用可能な全音声の一覧を返す。</summary>
+    string[] GetAvailableVoices();
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -32,14 +38,15 @@ public sealed class GodotTtsService : ITtsService
     private string? _voiceId;
 
     public bool IsEnabled => _config.Enabled;
+    public string? CurrentVoiceId => _voiceId;
 
     public GodotTtsService(TtsConfig config)
     {
         _config = config;
-        _voiceId = ResolveJapaneseVoice();
+        _voiceId = ResolveVoice(config.Voice);
 
         if (_voiceId is not null)
-            GD.Print($"[TTS] 日本語音声を検出: {_voiceId}");
+            GD.Print($"[TTS] 使用音声: {_voiceId}");
         else
             GD.PrintErr("[TTS] 日本語音声が見つかりません。システムに日本語TTSをインストールしてください。");
     }
@@ -76,11 +83,38 @@ public sealed class GodotTtsService : ITtsService
             Stop();
     }
 
+    public string[] GetAvailableVoices()
+    {
+        var all = DisplayServer.TtsGetVoices();
+        var result = new string[all.Count];
+        for (int i = 0; i < all.Count; i++)
+            result[i] = $"{all[i]["name"].AsString()}  (id: {all[i]["id"].AsString()})";
+        return result;
+    }
+
     // ──── 内部ユーティリティ ─────────────────────────────────
 
-    private static string? ResolveJapaneseVoice()
+    /// <summary>
+    /// voice 設定が指定されていれば部分一致で音声を検索。
+    /// 未指定の場合は日本語音声（ja → ja-JP）の先頭を返す。
+    /// </summary>
+    private static string? ResolveVoice(string? voiceName)
     {
-        // ja → ja-JP の順で検索
+        if (!string.IsNullOrWhiteSpace(voiceName))
+        {
+            // 全音声の "name" フィールドで部分一致検索（大文字小文字無視）
+            var all = DisplayServer.TtsGetVoices();
+            foreach (var v in all)
+            {
+                var name = v["name"].AsString();
+                var id   = v["id"].AsString();
+                if (name.Contains(voiceName, System.StringComparison.OrdinalIgnoreCase))
+                    return id;
+            }
+            GD.PrintErr($"[TTS] 指定音声 '{voiceName}' が見つかりません。日本語音声にフォールバックします。");
+        }
+
+        // フォールバック: ja → ja-JP の順で先頭の日本語音声を返す
         foreach (var lang in new[] { "ja", "ja-JP" })
         {
             var voices = DisplayServer.TtsGetVoicesForLanguage(lang);
