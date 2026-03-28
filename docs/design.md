@@ -45,9 +45,11 @@ Windows 向けデスクトップコンパニオンアプリケーションです
 2. `app.config` ロード (JSON)
 3. 背景画像ロード・ブラー適用
 4. 2D/3D キャラクターモデルロード・レンダリング
-5. `current_session == "na"` の場合は初回メッセージを `/v1/msg` に送信
-6. そうでなければ「おかえり」メッセージを送信
-7. レスポンス受信後、`emotion` に合わせた絵文字とともに会話ウィンドウに表示
+5. `GodotTtsService` 初期化（OS の日本語音声を自動検出）
+6. `current_session == "na"` の場合は初回メッセージを `/v1/msg` に送信
+7. そうでなければ「おかえり」メッセージを送信
+8. レスポンス受信後、`emotion` に合わせた絵文字とともに会話ウィンドウに表示
+9. TTS 有効時はキャラクターのメッセージを読み上げ
 
 **感情→絵文字マッピング**
 
@@ -134,9 +136,26 @@ DB ファイル: `$NEKOBOX_DB_PATH/nekobox.sqlite3`
     },
     "model": {
         "temperature": 0.6
+    },
+    "tts": {
+        "enabled": false,
+        "rate": 1.0,
+        "volume": 1.0,
+        "max_chars": 500
     }
 }
 ```
+
+**TTS 設定フィールド**
+
+| フィールド | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| `enabled` | bool | false | TTS の有効/無効 |
+| `rate` | float | 1.0 | 読み上げ速度（0.1 〜 10.0） |
+| `volume` | float | 1.0 | 音量（0.0 〜 1.0） |
+| `max_chars` | int | 500 | 読み上げ最大文字数（超過分は切り詰め） |
+
+> **注**: TTS は実行中に `/tts on` / `/tts off` コマンドで切り替え可能。変更は app.config に即時保存される。
 
 > **注**: `background_image` キーは仕様書サンプルでは `backend_image` と記載されているが
 > これは誤記と判断し `background_image` を正とする。
@@ -161,7 +180,25 @@ DB ファイル: `$NEKOBOX_DB_PATH/nekobox.sqlite3`
 | `NEKOBOX_LMSTUDIO_PORT` | ✅ | LM Studio ポート |
 | `RUST_LOG` | ❌ | ログレベル (既定: info) |
 
+### TTS サービス設計
+
+TTS は `ITtsService` インターフェースで抽象化されており、将来の差し替えを考慮した設計になっている。
+
+```
+ITtsService
+├── GodotTtsService  (現実装: Godot 組み込み OS-TTS、ネットワーク不要)
+└── VoicevoxTtsService  (将来実装: VOICEVOX HTTP API 経由の高品質日本語 TTS)
+```
+
+**GodotTtsService の動作**
+
+1. 初期化時に OS の日本語音声（`ja` → `ja-JP` の順）を自動検出
+2. `Speak()` 呼び出し時に前の発話を `TtsStop()` で中断してから新しいテキストを読み上げ
+3. `max_chars` を超えるテキストは先頭から切り詰め（プロンプトインジェクション対策）
+4. TTS が無効 or 日本語音声が未インストールの場合はサイレントにスキップ
+
 ## MVP 以降の拡張予定
 
 - キャラクターの入れ替え機能
 - `emotion` に合わせたキャラクターアニメーション
+- VOICEVOX 連携による高品質日本語 TTS（`ITtsService` を実装するだけで差し替え可能）

@@ -35,6 +35,9 @@ public sealed class AppConfig
     [JsonPropertyName("model")]
     public ModelConfig Model { get; set; } = new();
 
+    [JsonPropertyName("tts")]
+    public TtsConfig Tts { get; set; } = new();
+
     // ──── ヘルパー ────────────────────────────────────────────
 
     /// <summary>初回セッション（current_session == "na"）か</summary>
@@ -158,6 +161,29 @@ public sealed class ChatModelConfig
 {
     [JsonPropertyName("temperature")]
     public float Temperature { get; set; } = 0.6f;
+}
+
+// ──────────────────────────────────────────────────────────────
+//  TTS 設定
+// ──────────────────────────────────────────────────────────────
+
+public sealed class TtsConfig
+{
+    /// <summary>TTS を有効にするか（デフォルト: false）</summary>
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>読み上げ速度（0.1 〜 10.0、デフォルト: 1.0）</summary>
+    [JsonPropertyName("rate")]
+    public float Rate { get; set; } = 1.0f;
+
+    /// <summary>音量（0.0 〜 1.0、デフォルト: 1.0）</summary>
+    [JsonPropertyName("volume")]
+    public float Volume { get; set; } = 1.0f;
+
+    /// <summary>読み上げる最大文字数（デフォルト: 500）</summary>
+    [JsonPropertyName("max_chars")]
+    public int MaxChars { get; set; } = 500;
 }
 
 // ──────────────────────────────────────────────────────────────
