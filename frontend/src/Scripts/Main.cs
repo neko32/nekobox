@@ -25,6 +25,7 @@ public partial class Main : Node
     private int                  _lastMinute   = -1;
     private AppConfig            _config       = null!;
     private BackendApiClient     _api          = null!;
+    private ITtsService          _tts          = null!;
     private string               _cfgPath      = string.Empty;
     private string?              _lastResponseId;
     private GDCubismUserModelCS? _cubismModel;
@@ -119,6 +120,10 @@ public partial class Main : Node
 
         // バックエンド API クライアント初期化（バックエンドは 127.0.0.1:8080 で待ち受け）
         _api = new BackendApiClient("http://127.0.0.1:8080");
+
+        // TTS サービス初期化
+        _tts = new GodotTtsService(_config.Tts);
+        GD.Print($"[TTS] enabled={_config.Tts.Enabled}  rate={_config.Tts.Rate}  volume={_config.Tts.Volume}  max_chars={_config.Tts.MaxChars}");
 
         return true;
     }
@@ -404,6 +409,16 @@ public partial class Main : Node
             return;
         }
 
+        // メタコマンド: /tts [on|off|<テキスト>] → TTS の制御とテスト発話
+        const string ttsCmd = "/tts";
+        if (text.Equals(ttsCmd, StringComparison.Ordinal) ||
+            text.StartsWith(ttsCmd + " ", StringComparison.Ordinal))
+        {
+            var ttsArgs = text.Length > ttsCmd.Length ? text[(ttsCmd.Length + 1)..].Trim() : string.Empty;
+            HandleTtsCommand(ttsArgs);
+            return;
+        }
+
         _ = SendMessageAsync(text);
     }
 
@@ -466,6 +481,7 @@ public partial class Main : Node
                 _config.UserName, userMessage,
                 _config.Character.Name, res.Message, res.Emotion);
             ApplyEmotion(res.Emotion);
+            _tts.Speak(res.Message);
         }
         catch (ApiException e)
         {
@@ -474,6 +490,54 @@ public partial class Main : Node
         catch (Exception e)
         {
             _chatWindow.AddError("CLIENT_ERROR", e.Message);
+        }
+    }
+
+    // ──── TTS メタコマンド ────────────────────────────────────
+
+    private void HandleTtsCommand(string args)
+    {
+        switch (args.ToLowerInvariant())
+        {
+            case "on":
+                _tts.SetEnabled(true);
+                _config.Tts.Enabled = true;
+                _config.Save(_cfgPath);
+                _chatWindow.AddError("TTS", "TTS を有効にしました。");
+                GD.Print("[TTS] enabled → true");
+                break;
+
+            case "off":
+                _tts.SetEnabled(false);
+                _config.Tts.Enabled = false;
+                _config.Save(_cfgPath);
+                _chatWindow.AddError("TTS", "TTS を無効にしました。");
+                GD.Print("[TTS] enabled → false");
+                break;
+
+            case "voices":
+            {
+                var voices  = _tts.GetAvailableVoices();
+                var current = _tts.CurrentVoiceId ?? "(なし)";
+                var lines   = new System.Text.StringBuilder();
+                lines.AppendLine($"利用可能な音声: {voices.Length} 件  (現在: {current})");
+                lines.AppendLine();
+                for (int i = 0; i < voices.Length; i++)
+                    lines.AppendLine($"  [{i}] {voices[i]}");
+                var msg = lines.ToString().TrimEnd();
+                _chatWindow.AddError("TTS VOICES", msg);
+                GD.Print($"[TTS] voices:\n{msg}");
+                break;
+            }
+
+            default:
+                // 引数をそのままテスト発話
+                var testText = args.Length > 0 ? args : "テスト発話まる！";
+                _tts.Speak(testText);
+                _chatWindow.AddMessage(
+                    "[テスト]", $"/tts {args}",
+                    "[システム]", $"TTS テスト発話: {testText}", "普通");
+                break;
         }
     }
 }
