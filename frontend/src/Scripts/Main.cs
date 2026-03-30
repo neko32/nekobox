@@ -196,9 +196,23 @@ public partial class Main : Node
             return;
         }
 
-        GD.Print($"背景ロード完了: {_background.Name} ({imagePath})");
         // TextureRect が stretch_mode=0 (SCALE) で自動的にウィンドウサイズに合わせる
         _backgroundRect.Texture = ImageTexture.CreateFromImage(img);
+
+        // ブラー強度をコンフィグから適用（未設定の場合はデフォルト 3.0）
+        const float DefaultBlurAmount = 3.0f;
+        var blurAmount = _background.Blur ?? DefaultBlurAmount;
+        if (_backgroundRect.Material is ShaderMaterial shaderMaterial)
+            shaderMaterial.SetShaderParameter("blur_amount", blurAmount);
+
+        GD.Print(
+            $"[Background] id={_background.Id}" +
+            $" name={_background.Name}" +
+            $" image={imagePath}" +
+            $" description={_background.Description}" +
+            $" location_type=[{string.Join(", ", _background.LocationType)}]" +
+            $" blur={blurAmount}{(_background.Blur is null ? " (default)" : string.Empty)}"
+        );
     }
 
     private static Error DetectAndLoadImage(Image img, byte[] bytes)

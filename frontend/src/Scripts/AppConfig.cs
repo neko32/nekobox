@@ -214,6 +214,12 @@ public sealed class BackgroundEntry
 
     [JsonPropertyName("location_type")]
     public List<string> LocationType { get; set; } = [];
+
+    /// <summary>
+    /// ブラー強度。未設定の場合は null（シェーダーのデフォルト値 3.0 が適用される）。
+    /// </summary>
+    [JsonPropertyName("blur")]
+    public float? Blur { get; set; }
 }
 
 internal sealed class BackgroundConfigFile
