@@ -99,6 +99,7 @@ Write-Ok "  frontend/ copied."
 Write-Step "Copying docker-compose.yml (adjusting context path)..."
 $dcContent = Get-Content "$ProjectRoot\deploy\docker-compose.yml" -Raw -Encoding UTF8
 $dcContent  = $dcContent -replace 'context:\s*\.\./backend', 'context: ./backend'
+$dcContent  = $dcContent -replace '\.\./config:',           './config:'
 [System.IO.File]::WriteAllText("$InstallDir\docker-compose.yml", $dcContent, [System.Text.Encoding]::UTF8)
 Write-Ok "  docker-compose.yml copied."
 Write-Host ""
