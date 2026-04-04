@@ -1,21 +1,21 @@
-# nekobox Windows インストールスクリプト
+﻿# nekobox Windows install script
 #
-# 使い方:
+# Usage:
 #   .\install-windows.ps1
 #
-# 前提条件:
-#   - 環境変数 NEKOKAN_BIN_DIR が設定済みであること
-#   - Docker Desktop が起動済みであること
-#   - (任意) 環境変数 GODOT_PATH に Godot 実行ファイルのパスが設定済みであること
+# Requirements:
+#   - Environment variable NEKOKAN_BIN_DIR must be set
+#   - Docker Desktop must be running
+#   - (Optional) Set GODOT_PATH to the Godot executable path
 #
-# インストール先: $NEKOKAN_BIN_DIR\nekobox\
-#   ├── docker-compose.yml
-#   ├── config\
-#   ├── backend\    (Dockerfile + ソース - Docker ビルド用)
-#   ├── frontend\   (Godot プロジェクト)
-#   ├── logs\
-#   ├── start.ps1   (起動スクリプト)
-#   └── stop.ps1    (停止スクリプト)
+# Install destination: $NEKOKAN_BIN_DIR\nekobox\
+#   |- docker-compose.yml
+#   |- config\
+#   |- backend\    (Dockerfile + source for Docker build)
+#   |- frontend\   (Godot project)
+#   |- logs\
+#   |- start.ps1   (launch script)
+#   +- stop.ps1    (stop script)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -29,25 +29,25 @@ function Write-Warn { param([string]$Msg) Write-Host "[install] $Msg" -Foregroun
 function Write-Fail { param([string]$Msg) Write-Host "[install] $Msg" -ForegroundColor Red }
 
 # ---------------------------------------------------------------------------
-# 前提チェック
+# Prerequisite checks
 # ---------------------------------------------------------------------------
-Write-Step "前提条件を確認しますまる..."
+Write-Step "Checking prerequisites..."
 
 if (-not $env:NEKOKAN_BIN_DIR) {
-    Write-Fail "環境変数 NEKOKAN_BIN_DIR が設定されていないまる。"
-    Write-Fail "例: `$env:NEKOKAN_BIN_DIR = 'C:\tools\bin' を設定してから再実行してまる。"
+    Write-Fail "Environment variable NEKOKAN_BIN_DIR is not set."
+    Write-Fail "Example: `$env:NEKOKAN_BIN_DIR = 'C:\tools\bin'"
     exit 1
 }
 
 $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
 if (-not $dockerCmd) {
-    Write-Fail "docker コマンドが見つからないまる。Docker Desktop をインストール・起動してから再実行してまる。"
+    Write-Fail "docker command not found. Please install and start Docker Desktop."
     exit 1
 }
 
 $dockerInfo = docker info 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Fail "Docker Desktop が起動していないまる。起動してから再実行してまる。"
+    Write-Fail "Docker Desktop is not running. Please start it and retry."
     exit 1
 }
 
@@ -55,100 +55,100 @@ $DefaultGodotExe = "C:\resources\common\Godot_v4.6.1-stable_mono_win64\Godot_v4.
 $GodotExe = if ($env:GODOT_PATH) { $env:GODOT_PATH } else { $DefaultGodotExe }
 
 if (Test-Path $GodotExe) {
-    Write-Ok "Godot を検出したまる: $GodotExe"
+    Write-Ok "Godot detected: $GodotExe"
 } else {
-    Write-Warn "Godot が見つからないまる。フロントエンドの起動スクリプトは生成しますが、実行時に Godot が必要まる。"
+    Write-Warn "Godot not found. Start script will be generated but Godot is required at runtime."
 }
 
-Write-Ok "前提条件チェック完了まる。"
+Write-Ok "Prerequisite check passed."
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# ディレクトリ作成
+# Create directories
 # ---------------------------------------------------------------------------
 $InstallDir = Join-Path $env:NEKOKAN_BIN_DIR "nekobox"
-Write-Step "インストール先ディレクトリを準備しますまる: $InstallDir"
+Write-Step "Preparing install directory: $InstallDir"
 
 foreach ($dir in @($InstallDir, "$InstallDir\config", "$InstallDir\logs")) {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
-        Write-Ok "  作成: $dir"
+        Write-Ok "  Created: $dir"
     } else {
-        Write-Warn "  既存: $dir (スキップ)"
+        Write-Warn "  Already exists: $dir (skipped)"
     }
 }
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# ファイルのコピー
+# Copy files
 # ---------------------------------------------------------------------------
-Write-Step "設定ファイルをコピーしますまる..."
+Write-Step "Copying config files..."
 Copy-Item -Recurse -Force -Path "$ProjectRoot\config\*" -Destination "$InstallDir\config\"
-Write-Ok "  config/ をコピーしましたまる。"
+Write-Ok "  config/ copied."
 
-Write-Step "バックエンドソースをコピーしますまる (Docker ビルド用)..."
+Write-Step "Copying backend source (for Docker build)..."
 if (Test-Path "$InstallDir\backend") { Remove-Item -Recurse -Force "$InstallDir\backend" }
 Copy-Item -Recurse -Force -Path "$ProjectRoot\backend" -Destination $InstallDir
-Write-Ok "  backend/ をコピーしましたまる。"
+Write-Ok "  backend/ copied."
 
-Write-Step "フロントエンドをコピーしますまる..."
+Write-Step "Copying frontend..."
 if (Test-Path "$InstallDir\frontend") { Remove-Item -Recurse -Force "$InstallDir\frontend" }
 Copy-Item -Recurse -Force -Path "$ProjectRoot\frontend" -Destination $InstallDir
-Write-Ok "  frontend/ をコピーしましたまる。"
+Write-Ok "  frontend/ copied."
 
-Write-Step "docker-compose.yml を調整してコピーしますまる..."
-$dcContent = Get-Content "$ProjectRoot\deploy\docker-compose.yml" -Raw
+Write-Step "Copying docker-compose.yml (adjusting context path)..."
+$dcContent = Get-Content "$ProjectRoot\deploy\docker-compose.yml" -Raw -Encoding UTF8
 $dcContent  = $dcContent -replace 'context:\s*\.\./backend', 'context: ./backend'
-Set-Content -Path "$InstallDir\docker-compose.yml" -Value $dcContent -Encoding UTF8
-Write-Ok "  docker-compose.yml をコピーしましたまる。"
+[System.IO.File]::WriteAllText("$InstallDir\docker-compose.yml", $dcContent, [System.Text.Encoding]::UTF8)
+Write-Ok "  docker-compose.yml copied."
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# Docker イメージのビルド
+# Build Docker image
 # ---------------------------------------------------------------------------
-Write-Step "バックエンドの Docker イメージをビルドしますまる..."
+Write-Step "Building backend Docker image..."
 Push-Location $InstallDir
 try {
     docker compose build
     if ($LASTEXITCODE -ne 0) {
-        Write-Fail "Docker イメージのビルドに失敗したまる。"
+        Write-Fail "Docker image build failed."
         exit 1
     }
-    Write-Ok "Docker イメージのビルド完了まる。"
+    Write-Ok "Docker image build succeeded."
 } finally {
     Pop-Location
 }
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# 起動・停止スクリプトをテンプレートからコピー
+# Deploy start/stop scripts from templates
 # ---------------------------------------------------------------------------
-Write-Step "start.ps1 / stop.ps1 を配置しますまる..."
+Write-Step "Deploying start.ps1 and stop.ps1..."
 
-# stop.ps1 はそのままコピー
+# stop.ps1: copy template as-is
 Copy-Item -Force -Path "$ScriptDir\stop-template.ps1" -Destination "$InstallDir\stop.ps1"
-Write-Ok "  stop.ps1 を配置しましたまる。"
+Write-Ok "  stop.ps1 deployed."
 
-# start.ps1 はデフォルト Godot パスのプレースホルダを置換してコピー
-$startContent = Get-Content "$ScriptDir\start-template.ps1" -Raw
+# start.ps1: replace __DEFAULT_GODOT_EXE__ placeholder
+$startContent = Get-Content "$ScriptDir\start-template.ps1" -Raw -Encoding UTF8
 $startContent  = $startContent -replace '__DEFAULT_GODOT_EXE__', $GodotExe
-Set-Content -Path "$InstallDir\start.ps1" -Value $startContent -Encoding UTF8
-Write-Ok "  start.ps1 を配置しましたまる (Godot: $GodotExe)。"
+[System.IO.File]::WriteAllText("$InstallDir\start.ps1", $startContent, [System.Text.Encoding]::UTF8)
+Write-Ok "  start.ps1 deployed (Godot: $GodotExe)."
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# 完了
+# Done
 # ---------------------------------------------------------------------------
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host " nekobox のインストールが完了したまる！" -ForegroundColor Green
+Write-Host " nekobox installation complete!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  インストール先 : $InstallDir"
+Write-Host "  Install dir : $InstallDir"
 Write-Host ""
-Write-Host "  起動 (通常)    : $InstallDir\start.ps1"
-Write-Host "  起動 (デバッグ): $InstallDir\start.ps1 -Debug"
-Write-Host "  停止           : $InstallDir\stop.ps1"
+Write-Host "  Start       : $InstallDir\start.ps1"
+Write-Host "  Start(debug): $InstallDir\start.ps1 -Debug"
+Write-Host "  Stop        : $InstallDir\stop.ps1"
 Write-Host ""
-Write-Host "  ログ (stdout)  : $InstallDir\logs\backend.log"
-Write-Host "  ログ (stderr)  : $InstallDir\logs\backend-error.log"
+Write-Host "  Log(stdout) : $InstallDir\logs\backend.log"
+Write-Host "  Log(stderr) : $InstallDir\logs\backend-error.log"
 Write-Host ""

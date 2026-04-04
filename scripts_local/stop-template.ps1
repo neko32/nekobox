@@ -1,16 +1,16 @@
-# nekobox 停止スクリプト
-# このファイルは install-windows.ps1 によってインストール先に配置されます。
+﻿# nekobox stop script
+# Deployed by install-windows.ps1
 
 $InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "[nekobox] バックエンドを停止しますまる..." -ForegroundColor Cyan
+Write-Host "[nekobox] Stopping backend..." -ForegroundColor Cyan
 Push-Location $InstallDir
 try {
     docker compose down
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "[nekobox] バックエンドを停止しましたまる。" -ForegroundColor Green
+        Write-Host "[nekobox] Backend stopped." -ForegroundColor Green
     } else {
-        Write-Host "[nekobox] バックエンド停止中にエラーが発生したまる。" -ForegroundColor Red
+        Write-Host "[nekobox] Error occurred while stopping backend." -ForegroundColor Red
     }
 } finally {
     Pop-Location

@@ -1,9 +1,9 @@
-# nekobox 起動スクリプト
-# このファイルは install-windows.ps1 によってインストール先に配置されます。
+﻿# nekobox launch script
+# Deployed by install-windows.ps1
 #
-# 使い方:
-#   .\start.ps1           通常起動 (DOS画面抑制、ログはファイルへ)
-#   .\start.ps1 -Debug    デバッグ起動 (DOS画面表示)
+# Usage:
+#   .\start.ps1           Normal mode  (console window suppressed, log to file)
+#   .\start.ps1 -Debug    Debug mode   (console window shown)
 
 param(
     [switch]$Debug
@@ -19,7 +19,7 @@ function Write-Ok   { param([string]$Msg) Write-Host "[nekobox] $Msg" -Foregroun
 function Write-Warn { param([string]$Msg) Write-Host "[nekobox] $Msg" -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------------------
-# 環境変数 (未設定の場合のみデフォルト値を適用)
+# Environment variables (apply defaults only when not already set)
 # ---------------------------------------------------------------------------
 if (-not $env:NEKOBOX_CFG_PATH)      { $env:NEKOBOX_CFG_PATH      = "$InstallDir\config" }
 if (-not $env:NEKOBOX_DB_PATH)       { $env:NEKOBOX_DB_PATH       = "$InstallDir\data" }
@@ -28,7 +28,7 @@ if (-not $env:NEKOBOX_LMSTUDIO_HOST) { $env:NEKOBOX_LMSTUDIO_HOST = "localhost" 
 if (-not $env:NEKOBOX_LMSTUDIO_PORT) { $env:NEKOBOX_LMSTUDIO_PORT = "1234" }
 if (-not $env:RUST_LOG)              { $env:RUST_LOG              = "info" }
 
-Write-Info "設定を確認しますまる..."
+Write-Info "Configuration:"
 Write-Host "  InstallDir  : $InstallDir"
 Write-Host "  Config Path : $env:NEKOBOX_CFG_PATH"
 Write-Host "  LM Studio   : $env:NEKOBOX_LMSTUDIO_HOST:$env:NEKOBOX_LMSTUDIO_PORT"
@@ -37,7 +37,7 @@ Write-Host "  Debug Mode  : $Debug"
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# ログディレクトリ確認
+# Ensure log directory exists
 # ---------------------------------------------------------------------------
 $logDir = "$InstallDir\logs"
 if (-not (Test-Path $logDir)) {
@@ -45,18 +45,18 @@ if (-not (Test-Path $logDir)) {
 }
 
 # ---------------------------------------------------------------------------
-# バックエンド起動 (Docker Compose)
+# Start backend (Docker Compose)
 # ---------------------------------------------------------------------------
-Write-Info "バックエンドを起動しますまる..."
+Write-Info "Starting backend..."
 
 if ($Debug) {
-    # デバッグモード: DOS画面を表示して docker compose up を実行
-    Write-Info "[DEBUG] コンソールウィンドウを表示して起動しますまる。"
+    # Debug mode: show console window
+    Write-Info "[DEBUG] Launching with visible console window."
     Start-Process powershell `
         -ArgumentList '-NoExit', '-Command', "Set-Location '$InstallDir'; docker compose up" `
         -WorkingDirectory $InstallDir
 } else {
-    # 通常モード: DOS画面を抑制し stdout/stderr をログファイルへ出力
+    # Normal mode: suppress console window, redirect output to log files
     Start-Process docker `
         -ArgumentList 'compose', 'up' `
         -WorkingDirectory $InstallDir `
@@ -64,23 +64,23 @@ if ($Debug) {
         -RedirectStandardOutput $StdoutLog `
         -RedirectStandardError  $StderrLog
 
-    Write-Ok "バックエンドをバックグラウンドで起動しましたまる。"
-    Write-Info "ログ(stdout): $StdoutLog"
-    Write-Info "ログ(stderr): $StderrLog"
+    Write-Ok "Backend started in background."
+    Write-Info "Log(stdout): $StdoutLog"
+    Write-Info "Log(stderr): $StderrLog"
 }
 
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# フロントエンド起動 (Godot)
+# Start frontend (Godot)
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $GodotExe)) {
-    Write-Warn "Godot が見つからないまる: $GodotExe"
-    Write-Warn "GODOT_PATH 環境変数を設定して再実行するか、手動でフロントエンドを起動してまる。"
+    Write-Warn "Godot not found: $GodotExe"
+    Write-Warn "Set GODOT_PATH and retry, or launch the frontend manually."
     exit 0
 }
 
-Write-Info "フロントエンドを起動しますまる..."
+Write-Info "Starting frontend..."
 Write-Host "  Godot   : $GodotExe"
 Write-Host "  Project : $InstallDir\frontend"
 Write-Host ""
