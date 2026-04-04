@@ -1,4 +1,4 @@
-﻿# nekobox Windows install script
+# nekobox Windows install script
 #
 # Usage:
 #   .\install-windows.ps1
@@ -94,6 +94,10 @@ if (-not (Test-Path "$InstallDir\config\mcp_servers.json")) {
 }
 Write-Ok "  config/ copied."
 
+Write-Step "Copying app icon..."
+Copy-Item -Force -Path "$ProjectRoot\img\app_icon.ico" -Destination "$InstallDir\app_icon.ico"
+Write-Ok "  app_icon.ico copied."
+
 Write-Step "Copying backend source (for Docker build)..."
 Copy-Item -Recurse -Force -Path "$ProjectRoot\backend" -Destination $InstallDir
 Write-Ok "  backend/ copied."
@@ -145,6 +149,13 @@ Write-Ok "  start.ps1 deployed (Godot: $GodotExe)."
 Write-Host ""
 
 # ---------------------------------------------------------------------------
+# Create shortcut
+# ---------------------------------------------------------------------------
+Write-Step "Creating nekobox.lnk shortcut..."
+& "$ScriptDir\create-shortcut.ps1" -InstallDir $InstallDir -Desktop
+Write-Host ""
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 Write-Host "============================================================" -ForegroundColor Green
@@ -156,6 +167,7 @@ Write-Host ""
 Write-Host "  Start       : $InstallDir\start.ps1"
 Write-Host "  Start(debug): $InstallDir\start.ps1 -Debug"
 Write-Host "  Stop        : $InstallDir\stop.ps1"
+Write-Host "  Shortcut    : $InstallDir\nekobox.lnk  (also on Desktop)"
 Write-Host ""
 Write-Host "  Log(stdout) : $InstallDir\logs\backend.log"
 Write-Host "  Log(stderr) : $InstallDir\logs\backend-error.log"
