@@ -87,12 +87,10 @@ Copy-Item -Recurse -Force -Path "$ProjectRoot\config\*" -Destination "$InstallDi
 Write-Ok "  config/ copied."
 
 Write-Step "Copying backend source (for Docker build)..."
-if (Test-Path "$InstallDir\backend") { Remove-Item -Recurse -Force "$InstallDir\backend" }
 Copy-Item -Recurse -Force -Path "$ProjectRoot\backend" -Destination $InstallDir
 Write-Ok "  backend/ copied."
 
 Write-Step "Copying frontend..."
-if (Test-Path "$InstallDir\frontend") { Remove-Item -Recurse -Force "$InstallDir\frontend" }
 Copy-Item -Recurse -Force -Path "$ProjectRoot\frontend" -Destination $InstallDir
 Write-Ok "  frontend/ copied."
 
