@@ -37,7 +37,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 非 root ユーザーで実行（セキュリティベストプラクティス）
-RUN useradd -m -u 1000 -s /bin/sh nekobox
+# ディレクトリを root として作成・chown してから USER を切り替える。
+# こうしないと named volume 初回マウント時にディレクトリが root 所有となり
+# nekobox ユーザーが SQLite ファイルを作成できない。
+RUN useradd -m -u 1000 -s /bin/sh nekobox && \
+    mkdir -p /nekobox/config /nekobox/data && \
+    chown -R nekobox:nekobox /nekobox
+
 USER nekobox
 
 COPY --from=builder /app/target/release/nekobox-backend /app/nekobox-backend
