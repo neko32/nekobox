@@ -69,7 +69,7 @@ Write-Host ""
 $InstallDir = Join-Path $env:NEKOKAN_BIN_DIR "nekobox"
 Write-Step "Preparing install directory: $InstallDir"
 
-foreach ($dir in @($InstallDir, "$InstallDir\config", "$InstallDir\data", "$InstallDir\logs")) {
+foreach ($dir in @($InstallDir, "$InstallDir\config", "$InstallDir\data", "$InstallDir\logs", "$InstallDir\uv")) {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
         Write-Ok "  Created: $dir"
@@ -83,7 +83,15 @@ Write-Host ""
 # Copy files
 # ---------------------------------------------------------------------------
 Write-Step "Copying config files..."
-Copy-Item -Recurse -Force -Path "$ProjectRoot\config\*" -Destination "$InstallDir\config\"
+# mcp_servers.json はユーザーが編集する可能性があるため除外してコピー
+Copy-Item -Recurse -Force -Path "$ProjectRoot\config\*" -Exclude "mcp_servers.json" -Destination "$InstallDir\config\"
+# mcp_servers.json は存在しない場合のみテンプレートをデプロイ
+if (-not (Test-Path "$InstallDir\config\mcp_servers.json")) {
+    Copy-Item -Force -Path "$ProjectRoot\config\mcp_servers.json" -Destination "$InstallDir\config\mcp_servers.json"
+    Write-Ok "  mcp_servers.json deployed (empty template)."
+} else {
+    Write-Warn "  mcp_servers.json already exists (user config preserved)."
+}
 Write-Ok "  config/ copied."
 
 Write-Step "Copying backend source (for Docker build)..."

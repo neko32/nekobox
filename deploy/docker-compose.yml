@@ -32,6 +32,8 @@ services:
       - ${NEKOBOX_CFG_PATH}:/nekobox/config:ro
       # SQLite DB — ホスト側ディレクトリを直接マウント (バックアップ・参照が容易)
       - ../data:/nekobox/data
+      # uv ツールキャッシュ — コンテナ再作成後も MCP サーバを再インストールしない
+      - ../uv:/nekobox/uv
     restart: unless-stopped
     healthcheck:
       # /v1/msg は POST のみなので 405 が返れば起動済みと判断
