@@ -28,7 +28,8 @@ services:
       RUST_LOG: info
     volumes:
       # app.config・キャラクター設定・背景画像 (読み取り専用)
-      - ../config:/nekobox/config:ro
+      # NEKOBOX_CFG_PATH をそのままマウント (フロントエンドと同じconfigを参照)
+      - ${NEKOBOX_CFG_PATH}:/nekobox/config:ro
       # SQLite DB — ホスト側ディレクトリを直接マウント (バックアップ・参照が容易)
       - ../data:/nekobox/data
     restart: unless-stopped

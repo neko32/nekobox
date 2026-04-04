@@ -97,8 +97,8 @@ Write-Ok "  frontend/ copied."
 Write-Step "Copying docker-compose.yml (adjusting context path)..."
 $dcContent = Get-Content "$ProjectRoot\deploy\docker-compose.yml" -Raw -Encoding UTF8
 $dcContent  = $dcContent -replace 'context:\s*\.\./backend', 'context: ./backend'
-$dcContent  = $dcContent -replace '\.\./config:',           './config:'
 $dcContent  = $dcContent -replace '\.\./data:',             './data:'
+# NEKOBOX_CFG_PATH は環境変数のままdocker-compose.ymlに残す (置換不要)
 [System.IO.File]::WriteAllText("$InstallDir\docker-compose.yml", $dcContent, [System.Text.Encoding]::UTF8)
 Write-Ok "  docker-compose.yml copied."
 Write-Host ""
