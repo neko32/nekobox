@@ -29,8 +29,8 @@ services:
     volumes:
       # app.config・キャラクター設定・背景画像 (読み取り専用)
       - ../config:/nekobox/config:ro
-      # SQLite DB 永続化 (名前付きボリューム)
-      - nekobox_data:/nekobox/data
+      # SQLite DB — ホスト側ディレクトリを直接マウント (バックアップ・参照が容易)
+      - ../data:/nekobox/data
     restart: unless-stopped
     healthcheck:
       # /v1/msg は POST のみなので 405 が返れば起動済みと判断
@@ -45,6 +45,4 @@ services:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"
 
-volumes:
-  nekobox_data:
-    name: nekobox_data
+# volumes セクション不要 (bind mount に変更したため)
