@@ -19,11 +19,12 @@ function Write-Ok   { param([string]$Msg) Write-Host "[nekobox] $Msg" -Foregroun
 function Write-Warn { param([string]$Msg) Write-Host "[nekobox] $Msg" -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------------------
-# Environment variables (apply defaults only when not already set)
+# Environment variables
+# CFG_PATH / DB_PATH はインストール先に固定 (既存の環境変数より優先)
+# LM Studio の接続先のみ環境変数で上書き可能
 # ---------------------------------------------------------------------------
-if (-not $env:NEKOBOX_CFG_PATH)      { $env:NEKOBOX_CFG_PATH      = "$InstallDir\config" }
-if (-not $env:NEKOBOX_DB_PATH)       { $env:NEKOBOX_DB_PATH       = "$InstallDir\data" }
-if (-not $env:NEKOBOX_BIND_HOST)     { $env:NEKOBOX_BIND_HOST     = "127.0.0.1" }
+$env:NEKOBOX_CFG_PATH = "$InstallDir\config"
+$env:NEKOBOX_DB_PATH  = "$InstallDir\data"
 if (-not $env:NEKOBOX_LMSTUDIO_HOST) { $env:NEKOBOX_LMSTUDIO_HOST = "localhost" }
 if (-not $env:NEKOBOX_LMSTUDIO_PORT) { $env:NEKOBOX_LMSTUDIO_PORT = "1234" }
 if (-not $env:RUST_LOG)              { $env:RUST_LOG              = "info" }
