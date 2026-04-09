@@ -160,12 +160,24 @@ async fn collect_mcp_tools(
         }
     };
 
+    if server_names.is_empty() {
+        info!("MCP servers: (none installed)");
+    } else {
+        info!("MCP servers detected: {}", server_names.join(", "));
+    }
+
     // 各サーバーからツール定義を取得
     let mut all_tools = Vec::new();
     for name in &server_names {
         match provider.list_tools(name).await {
             Ok(tools) => {
-                info!("Loaded {} tool(s) from MCP server '{name}'", tools.len());
+                let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+                info!(
+                    "MCP server '{}': {} tool(s) [{}]",
+                    name,
+                    tools.len(),
+                    tool_names.join(", ")
+                );
                 all_tools.extend(tools);
             }
             Err(e) => {
