@@ -1,3 +1,8 @@
 {
-  "servers": []
+  "servers": [
+    {
+      "name": "nekomcp_timer",
+      "source": "git+https://github.com/neko32/nekomcp.git#subdirectory=mcp_servers/timer"
+    }
+  ]
 }

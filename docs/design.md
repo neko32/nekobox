@@ -197,6 +197,68 @@ ITtsService
 3. `max_chars` を超えるテキストは先頭から切り詰め（プロンプトインジェクション対策）
 4. TTS が無効 or 日本語音声が未インストールの場合はサイレントにスキップ
 
+## MCP (Model Context Protocol) 連携
+
+### 概要
+
+バックエンドは MCP サーバーをサブプロセス (stdio 方式) として起動し、ツール定義の取得 (`tools/list`) とツール呼び出し (`tools/call`) を JSON-RPC 2.0 over stdio で実行する。
+
+```
+[Rust バックエンド]
+    ↓ uv tool run <server_command>  (サブプロセス spawn)
+[MCP サーバー (Python/FastMCP)]
+    ← JSON-RPC 2.0 over stdin/stdout →
+```
+
+### mcp_servers.json (コンテナ起動時にインストールするサーバー定義)
+
+パス: `$NEKOBOX_CFG_PATH/mcp_servers.json`
+
+```json
+{
+  "servers": [
+    {
+      "name": "nekomcp_timer",
+      "source": "git+https://github.com/neko32/nekomcp.git#subdirectory=mcp_servers/timer"
+    }
+  ]
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `name`    | パッケージ名。`uv tool list` の出力でインストール済みチェックに使用 |
+| `source`  | `uv tool install` に渡すインストールソース。PyPI 名または `git+https://...` URL |
+
+`entrypoint.sh` がコンテナ起動時に `mcp_servers.json` を読み込み、未インストールのサーバーを `uv tool install <source>` で自動インストールする。インストール済みのサーバーはスキップされる（`uv` のキャッシュボリューム `/nekobox/uv` により永続化）。
+
+### MCP プロトコルフロー
+
+```
+client → server : {"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}
+server → client : {"jsonrpc":"2.0","id":1,"result":{...}}
+client → server : {"jsonrpc":"2.0","method":"notifications/initialized"}
+client → server : {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+server → client : {"jsonrpc":"2.0","id":2,"result":{"tools":[...]}}
+```
+
+### 現在登録済みの MCP サーバー
+
+| サーバー名 | ツール | 説明 |
+|-----------|--------|------|
+| `nekomcp_timer` | `get_time` | 現在時刻を `HH:MM:SS` 形式で返す |
+| `nekomcp_timer` | `get_date` | 現在日付を `YYYY-MM-DD` 形式で返す |
+
+### Rust 実装
+
+| モジュール | 説明 |
+|-----------|------|
+| `core::mcp::McpToolProvider` | トレイト定義（テスト時は `MockMcpToolProvider` に差し替え） |
+| `core::mcp::UvMcpToolProvider` | `uv tool run` でサブプロセスを spawn する実装 |
+| `core::mcp::parse_uv_tool_list` | `uv tool list` 出力をパースしてコマンド名リストを返す |
+
+バックエンド起動時に `uv tool list` で全インストール済みサーバーを検出し、各サーバーの `tools/list` を呼び出してツール定義を `AppState::available_tools` に格納する。LM Studio へのリクエスト時にこの定義が `tools` パラメータとして渡され、AI がツールを呼び出せるようになる。
+
 ## MVP 以降の拡張予定
 
 - キャラクターの入れ替え機能
